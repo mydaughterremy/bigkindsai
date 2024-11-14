@@ -1,0 +1,22 @@
+{
+    "opensearch": {
+        "indexName": "kinds-ai-v1",
+        "textQueryStrategy": {
+            "scoringMode": "relevance",
+            "fields": {
+                "content": {
+                    "valueType": "text",
+                    "queryType": "should"
+                },
+                "provider": {
+                    "valueType": "text",
+                    "queryType": "filter"
+                },
+                "title": {
+                    "valueType": "text",
+                    "queryType": "should"
+                }
+            }
+        }
+    }
+}

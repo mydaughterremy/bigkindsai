@@ -1,0 +1,129 @@
+#index_name: kinds-news-v1
+index_name: bigkinds-ai
+batch_size: 2000
+settings:
+  index:
+    analysis:
+      analyzer:
+        seunjeon:
+          filter:
+            - lowercase
+            - trim
+          tokenizer: seunjeon_tokenizer
+          type: custom
+      tokenizer:
+        seunjeon_tokenizer:
+          decompound: true
+          deinflect: false
+          index_eojeol: true
+          index_poses:
+            - UNK
+            - I
+            - M
+            - N
+            - S
+            - SL
+            - SH
+            - SN
+            - V
+            - VCP
+            - XP
+            - XS
+            - XR
+          pos_tagging: false
+          type: seunjeon_tokenizer
+    number_of_shards: 4
+fields:
+  text_field:
+    news_id:
+      src_field:
+        - news_id
+      type: keyword
+    title:
+      analyzer: seunjeon
+      src_field:
+        - title
+      type: text
+    content:
+      analyzer: seunjeon
+      src_field:
+        - content
+      type: text
+    published_at:
+      src_field:
+        - published_at
+      type: date
+    enveloped_at:
+      src_field:
+        - enveloped_at
+      type: date
+    dateline:
+      src_field:
+        - dateline
+      type: date
+    provider:
+      src_field:
+        - provider
+      fields:
+        keyword:
+          type: keyword
+      type: text
+    category:
+      src_field:
+        - category
+      type: keyword
+    category_incident:
+      src_field:
+        - category_incident
+      type: keyword
+    byline:
+      src_field:
+        - byline
+      fields:
+        keyword:
+          type: keyword
+      type: keyword
+    subject_info:
+      src_field:
+        - subject_info
+      type: keyword
+      index: false
+    subject_info1:
+      src_field:
+        - subject_info1
+      type: keyword
+      index: false
+    subject_info2:
+      src_field:
+        - subject_info2
+      type: keyword
+      index: false
+    subject_info3:
+      src_field:
+        - subject_info3
+      type: keyword
+      index: false
+    subject_info4:
+      src_field:
+        - subject_info4
+      type: keyword
+      index: false
+    provider_link_page:
+      src_field:
+        - provider_link_page
+      type: keyword
+      index: false
+    images:
+      src_field:
+        - images
+      type: keyword
+      index: false
+    article_length:
+      src_field:
+          - article_length
+      type: integer
+      index: false
+doc_id_fields:
+  - news_id
+  - __SEQ__
+dedup_field: news_id

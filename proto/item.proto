@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+message Item {
+    string id = 1;
+    google.protobuf.Struct attributes = 2;
+    float score = 3;
+}
+
+message Items {
+    string id = 1;
+    repeated Item items = 2;
+}

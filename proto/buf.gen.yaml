@@ -1,0 +1,30 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: bigkinds.or.kr/proto
+    except:
+      - buf.build/googleapis/googleapis
+      - buf.build/envoyproxy/protoc-gen-validate
+      - buf.build/bufbuild/protovalidate
+plugins:
+  - plugin: buf.build/grpc/go:v1.3.0
+    out: ./
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/protocolbuffers/go
+    out: ./
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc-ecosystem/gateway:v2.16.0
+    out: ./
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/bufbuild/validate-go:v1.0.1
+    out: ./
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/python:v1.59.2
+    out: ./ 
+  - plugin: buf.build/protocolbuffers/python
+    out: ./

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+import "validate/validate.proto";
+import "searcher/opensearch.proto";
+
+message SearcherConfig {
+    oneof searcher {
+        OpenSearchSearcher opensearch = 2;
+    }
+}
+
+message SearcherConfigWithID {
+    string id = 1;
+    SearcherConfig searcher_config = 2;
+}

@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+import "validate/validate.proto";
+import "searcher/searcher_resource.proto";
+import "encoder/encoder.proto";
+import "google/protobuf/struct.proto";
+
+message OpenSearchSearcher {
+    message Field {
+        string value_type = 1 [(validate.rules).string.min_len = 1];
+        string query_type = 2 [(validate.rules).string = {
+            in: ["filter", "should"]
+        }];
+        string source_field = 3;
+        bool secondary_should = 4;
+    }
+    message TextQueryStrategy {
+        string scoring_mode = 1 [(validate.rules).string = {
+            in: ["relevance", "softmax", "harmonic"]
+        }];
+        map<string,Field> fields = 2;
+    }
+
+    message VectorQueryStrategy {
+        message KNNStrategy {
+            string field = 1 [(validate.rules).string.min_len = 1];
+            string source_field = 2;
+            int32 k = 3;
+        }
+
+        message FilterStrategy {
+            string mode = 1 [(validate.rules).string = {
+                in: ["efficient-knn", "post-filter"]
+            }];
+            google.protobuf.Struct filter = 2;
+        }
+
+        KNNStrategy knn_strategy = 2;
+        FilterStrategy filter_strategy = 3;
+        Encoder encoder =5;
+    }
+
+    message CompoundStrategy {
+        message FunctionScore {
+            repeated google.protobuf.Struct functions = 1 [(validate.rules).repeated = {
+                min_items: 1,
+            }];
+        }
+
+        oneof compound_strategy {
+            FunctionScore function_score = 1;
+        }
+    }
+
+    string index_name = 2;
+    oneof query_strategy {
+        TextQueryStrategy text_query_strategy = 3;
+        VectorQueryStrategy vector_query_strategy = 4;
+    }
+    CompoundStrategy compound_strategy = 5;
+}

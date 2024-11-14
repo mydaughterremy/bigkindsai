@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+import "item.proto";
+import "search_config.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "buf/validate/validate.proto";
+
+service SearchService {
+    rpc Search(SearchRequest) returns (SearchResponse) {
+        option (google.api.http) = {
+            post: "/search"
+            body: "*"
+        };
+    }
+    rpc MSearch(MSearchRequest) returns (MSearchResponse) {
+        option (google.api.http) = {
+            post: "/msearch"
+            body: "*"
+        };
+    }
+}
+
+message SearchRequest {
+    map<string, string> query = 1;
+    string exclude = 2;
+    int32 size = 3;
+    google.protobuf.Struct filter = 4; // TODO: need to be replaced to `filters`
+    string raw_query = 5;
+    string id = 6;
+    repeated google.protobuf.Struct filters = 7;
+}
+
+message SearchResponse {
+    repeated Item items = 1;
+}
+
+
+message MSearchRequest {
+    message Aggregate {
+        string method = 1;
+        bool preserve_source = 2;
+    }
+    repeated SearchRequest requests = 1;
+    int32 size = 2;
+    string raw_query = 3;
+    Aggregate aggregate = 4;
+
+}
+
+message MSearchResponse {
+    repeated Items items = 1;
+}

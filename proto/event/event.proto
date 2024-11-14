@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package event;
+
+import "google/protobuf/timestamp.proto";
+
+message Event {
+    string qa_id = 1;
+    google.protobuf.Timestamp created_at = 2;
+
+    oneof event {
+        AnswerUpdated answer_updated = 3;
+        QuestionCreated question_created = 4;
+        TokenCountUpdated token_count_updated = 5;
+        ReferencesCreated references_created = 6;
+        KeywordsCreated keywords_created = 7;
+        RelatedQueriesCreated related_queries_created = 8;
+    }
+}
+
+message AnswerUpdated {
+    string answer = 1;
+    string llm_provider = 2;
+    string llm_model = 3;
+}
+
+message QuestionCreated {
+    string chat_id = 1;
+    string session_id = 2;
+    string job_group = 3;
+    string question = 4;
+}
+
+message TokenCountUpdated {
+    int32 token_count = 1;
+}
+
+message ReferenceAttributes {
+    string news_id = 1;
+    string title = 2;
+    google.protobuf.Timestamp published_at = 3;
+    string provider = 4;
+    string byline = 5;
+    string content = 6;
+}
+
+message Reference {
+    string id = 1;
+    ReferenceAttributes attributes = 2;
+}
+
+message ReferencesCreated {
+    repeated Reference references = 1;
+}
+
+message KeywordsCreated {
+    repeated string keywords = 1;
+}
+
+message RelatedQueriesCreated {
+    repeated string related_queries = 1;
+}

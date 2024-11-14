@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+service ChatService {
+    rpc Chat(ChatRequest) returns (ChatResponse) {}
+    rpc StreamChat(ChatRequest) returns (stream ChatResponse) {}
+}
+
+message ChatPayload {
+    string role = 1;
+    string content = 2; // TODO: optional
+    optional string name = 3;
+    optional FunctionCall function_call = 4;
+}
+
+message FunctionCall {
+    string name = 1;
+    string arguments = 2;
+}
+
+message ChatRequest {
+    ChatModel model = 1;
+    repeated ChatPayload messages = 2;
+}
+
+message ChatModel {
+    string name = 1;
+    oneof options {
+        GptOptions gpt_options = 2;
+        PalmOptions palm_options = 3;
+    }
+}
+
+message ChatResponse {
+    string finishReason = 1;
+    optional ChatPayload messages = 2;
+    optional FunctionCall functionCall = 3; // TODO: deprecated, remove
+}
+
+message GptOptions {
+    repeated string functions = 1;
+    optional string function_call = 2;
+    optional float temperature = 3;
+    optional float top_p = 4;
+    optional int32 max_tokens = 5;
+    optional float presence_penalty = 6;
+    optional float frequency_penalty = 7;
+    bool stream = 8;
+    optional string response_format = 9;
+    optional int64 seed = 10;
+}
+
+message PalmOptions {
+    optional string context = 1;
+    optional float temperature = 2;
+    optional float topP = 3;
+    optional int32 topK = 4;
+    optional int32 maxOutputTokens = 5;
+}

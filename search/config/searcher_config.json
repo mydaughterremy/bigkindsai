@@ -1,0 +1,22 @@
+{
+    "opensearch": {
+        "indexName": "bigkinds-ai",
+        "textQueryStrategy": {
+            "scoringMode": "relevance",
+            "fields": {
+                "content": {
+                    "valueType": "text",
+                    "queryType": "should"
+                },
+                "provider": {
+                    "valueType": "text",
+                    "queryType": "filter"
+                },
+                "title": {
+                    "valueType": "text",
+                    "queryType": "should"
+                }
+            }
+        }
+    }
+}

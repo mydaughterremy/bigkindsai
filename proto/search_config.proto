@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+import "validate/validate.proto";
+
+message SearchConfig {
+    string searcher_type = 3 [(validate.rules).string = {
+        in: ["opensearch"]
+    }];
+    Reranker reranker = 4;
+    bool use_group = 5;
+}
+
+
+message Reranker {
+    message QuerySource {
+        message Query {
+            string field = 1;
+        }
+        message RawQuery {
+
+        }
+        message ConcatQueryAndRawQuery {
+            string field = 1;
+        }
+        oneof source {
+            RawQuery raw_query = 1;
+            Query query = 2;
+            ConcatQueryAndRawQuery concat_query_and_raw_query = 3;
+        }
+    }
+    reserved 1;
+    repeated string passage_fields = 2;
+    string reranker_type = 3 [(validate.rules).string = {
+        in: ["e5"]
+    }];
+    QuerySource query_source = 4;
+    string dedup_field = 5;
+}

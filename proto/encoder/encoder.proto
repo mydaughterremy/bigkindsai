@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+import "validate/validate.proto";
+
+message Encoder {
+    message SentenceTransformer {
+    }
+
+    oneof encoder {
+        SentenceTransformer sentence_transformer = 3;
+    }
+}

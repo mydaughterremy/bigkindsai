@@ -1,0 +1,341 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"bigkinds.or.kr/backend/internal/http/request"
+	"bigkinds.or.kr/backend/model"
+
+	pb "bigkinds.or.kr/proto/event"
+)
+
+type CompletionService struct {
+	ChatService     *ChatService
+	EventLogService *EventLogService
+
+	convEngineEndpoint string
+	client             *http.Client
+}
+
+type CreateChatCompletionParameter struct {
+	ChatID   string           `json:"chat_id"`
+	Messages []*model.Message `json:"payloads"`
+	Session  string           `json:"session"`
+	JobGroup string           `json:"job_group"`
+	Provider string           `json:"provider"`
+}
+
+type CreateChatCompletionResult struct {
+	Completion *model.Completion `json:"completion"`
+	Done       bool              `json:"done"`
+	Error      error             `json:"error"`
+}
+
+func NewCompletionService(
+	chatService *ChatService,
+	eventLogService *EventLogService,
+) (*CompletionService, error) {
+
+	convEngineEndpoint, ok := os.LookupEnv("UPSTAGE_CONVERSATION_ENGINE_ENDPOINT")
+	if !ok {
+		return nil, errors.New("UPSTAGE_CONVERSATION_ENGINE_ENDPOINT is not set")
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
+
+	service := &CompletionService{
+		ChatService:        chatService,
+		EventLogService:    eventLogService,
+		convEngineEndpoint: convEngineEndpoint,
+		client:             client,
+	}
+
+	return service, nil
+}
+
+func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
+	qas, err := s.ChatService.ListChatQAs(timeoutctx, param.Session, param.ChatID)
+	if err != nil {
+		slog.Error("error getting chat qas", "error", err.Error())
+		qas = make([]*model.QA, 0)
+	}
+
+	messages := make([]*model.Message, 0)
+
+	referenceUsed := false
+
+	for i := len(qas) - 1; i >= 0; i-- {
+		// start iteration from latest to use only latest reference
+
+		qa := qas[i]
+
+		if qa.Answer == "" || qa.Question == "" {
+			continue
+		}
+
+		// payload flow : question -> reference -> answer
+		// should be reversed to append to payloads
+
+		messages = append(messages, &model.Message{
+			Content: qa.Answer,
+			Role:    "assistant",
+		})
+
+		if qa.References != nil && !referenceUsed {
+			b, err := json.Marshal(qa.References)
+			if err != nil {
+				return nil, err
+			}
+
+			functionName := "search"
+
+			messages = append(messages, &model.Message{
+				Content: string(b),
+				Role:    "function",
+				Name:    functionName,
+			})
+
+		}
+
+		messages = append(messages, &model.Message{
+			Content: qa.Question,
+			Role:    "user",
+		})
+	}
+
+	slices.Reverse(messages)
+
+	param.Messages = append(messages, param.Messages...)
+
+	return s.CreateChatCompletion(ctx, param)
+}
+
+func (s *CompletionService) findLastUserMessage(messages []*model.Message) *model.Message {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return messages[i]
+		}
+	}
+	return nil
+}
+
+func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	messages := param.Messages
+
+	qaId := uuid.New().String()
+	chatId := param.ChatID
+	sessionId := param.Session
+	jobGroup := param.JobGroup
+	articleProvider := param.Provider
+	if chatId == "" || sessionId == "" {
+		return nil, fmt.Errorf("chat id, session id is empty")
+	}
+
+	if sessionId == "error-test" {
+		return nil, fmt.Errorf("error test")
+	}
+
+	// send QuestionCreated event
+	lastUserMessage := s.findLastUserMessage(messages)
+	if lastUserMessage == nil {
+		return nil, fmt.Errorf("there is no user message")
+	}
+	questionCreatedEvent := &pb.Event{
+		QaId:      qaId,
+		CreatedAt: timestamppb.New(time.Now()),
+		Event: &pb.Event_QuestionCreated{
+			QuestionCreated: &pb.QuestionCreated{
+				ChatId:    chatId,
+				SessionId: sessionId,
+				JobGroup:  jobGroup,
+				Question:  lastUserMessage.Content,
+			},
+		},
+	}
+	err := s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *CreateChatCompletionResult, 10)
+
+	go func() {
+		defer close(ch)
+
+		if sessionId == "stream-error-test" {
+			ch <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("stream error test"),
+			}
+			return
+		}
+
+		lastUserPayloads := messages[len(messages)-1]
+		if lastUserPayloads.Role != "user" {
+			ch <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("last payload role should be user"),
+			}
+			return
+		}
+		if len(strings.Split(lastUserPayloads.Content, " ")) == 1 {
+			completion := &model.Completion{
+				Object:  "chat.completion",
+				Id:      qaId,
+				Created: int(time.Now().Unix()),
+				Delta: &model.CompletionDelta{
+					Content: "더 구체적인 질문을 해 주세요",
+				},
+			}
+			ch <- &CreateChatCompletionResult{
+				Completion: completion,
+			}
+			ch <- &CreateChatCompletionResult{
+				Done: true,
+			}
+			return
+		}
+		tokenCount := 0
+
+		req := model.CreateChatCompletionRequest{
+			Messages: messages,
+			Provider: articleProvider,
+		}
+		b, err := json.Marshal(req)
+		if err != nil {
+			ch <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		stream, err := request.CreateChatStream(ctx, s.client, s.convEngineEndpoint, b)
+		if err != nil {
+			ch <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		defer stream.Close()
+
+		for {
+			select {
+			case <-ctx.Done():
+				ch <- &CreateChatCompletionResult{
+					Error: ctx.Err(),
+				}
+				return
+			default:
+				resp, err := stream.Recv()
+				if err != nil && err != io.EOF {
+					ch <- &CreateChatCompletionResult{
+						Error: err,
+					}
+
+					return
+				}
+				if err == io.EOF {
+					return
+				}
+
+				completion := &model.Completion{
+					Object:  "chat.completion",
+					Id:      qaId,
+					Created: int(time.Now().Unix()),
+					Delta:   resp.Delta,
+				}
+
+				ch <- &CreateChatCompletionResult{
+					Completion: completion,
+				}
+
+				// count token
+				tokenCount += resp.TokenUsage
+				_ = s.EventLogService.WriteEvent(ctx, &pb.Event{
+					QaId: qaId,
+					Event: &pb.Event_TokenCountUpdated{
+						TokenCountUpdated: &pb.TokenCountUpdated{
+							TokenCount: int32(tokenCount),
+						},
+					},
+					CreatedAt: timestamppb.New(time.Now()),
+				})
+
+				// write event
+				merged := stream.ReadUntilNow()
+
+				if merged.Delta.Content != "" {
+					answerUpdatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_AnswerUpdated{
+							AnswerUpdated: &pb.AnswerUpdated{
+								Answer: merged.Delta.Content,
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
+				}
+
+				if len(merged.Delta.References) > 0 {
+					referencesCreatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_ReferencesCreated{
+							ReferencesCreated: &pb.ReferencesCreated{
+								References: model.FromModelReferencesToProtoReferences(merged.Delta.References),
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, referencesCreatedEvent)
+				}
+
+				if len(merged.Delta.Keywords) > 0 {
+					keywordsCreatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_KeywordsCreated{
+							KeywordsCreated: &pb.KeywordsCreated{
+								Keywords: merged.Delta.Keywords,
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, keywordsCreatedEvent)
+				}
+
+				if len(merged.Delta.RelatedQueries) > 0 {
+					relatedQueriesCreatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_RelatedQueriesCreated{
+							RelatedQueriesCreated: &pb.RelatedQueriesCreated{
+								RelatedQueries: merged.Delta.RelatedQueries,
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, relatedQueriesCreatedEvent)
+				}
+			}
+		}
+
+	}()
+
+	return ch, nil
+}

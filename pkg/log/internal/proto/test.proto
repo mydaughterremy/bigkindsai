@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option go_package="bigkinds.or.kr/pkg/log/internal/proto";
+
+message TestRequest {
+    string msg = 1;
+}
+
+message TestResponse {
+    string msg = 1;
+}

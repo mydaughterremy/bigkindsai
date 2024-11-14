@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+import "item.proto";
+import "search.proto";
+import "google/protobuf/struct.proto";
+
+service OSSearcherService {
+    rpc Search(OSSearcherSearchRequest) returns (OSSearcherSearchResponse) {}
+}
+
+message OSSearcherSearchRequest {
+    reserved 4;
+    map<string, string> query = 1;
+    string exclude = 2;
+    int32 size = 3;
+    repeated google.protobuf.Struct filters = 5;
+}
+
+message OSSearcherSearchResponse {
+    repeated Item items = 1;
+}

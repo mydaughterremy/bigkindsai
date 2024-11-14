@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "validate/validate.proto";
+
+message SearcherResourceConfig {
+    message ContainerResource {
+        string cpu = 1 [(validate.rules).string.min_len = 1];
+        string memory = 2 [(validate.rules).string.min_len = 1];
+        string gpu = 3;
+    }
+    message Cluster {
+        string context = 1 [(validate.rules).string = {in: ["gangnam1", "gangnam2"]}];
+        string device = 2 [(validate.rules).string = {
+            in: ["cpu", "a10"]
+        }];
+        ContainerResource requests = 3;
+        ContainerResource limits = 4;
+    }
+
+    oneof backend {
+        Cluster cluster = 1;
+    }
+}
