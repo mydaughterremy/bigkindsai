@@ -1,0 +1,11 @@
+{                                                                                                                                                                                                                                                                     
+    "searcher_type": "opensearch",
+    "reranker": {
+        "passage_fields": ["content", "description"],
+        "reranker_type": "e5",
+        "query_source": {
+            "raw_query": {}
+        },
+        "dedup_field": "doc_id"
+    }
+}

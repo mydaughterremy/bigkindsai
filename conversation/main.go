@@ -20,16 +20,16 @@ func main() {
 	arg.MustParse(&args)
 	_ = godotenv.Load()
 
-	r := handler.NewRouter()
+	router := handler.NewRouter()
 	log.Println("Starting server on", args.RestEndpoint)
 
-	srv := &http.Server{
+	httpServer := &http.Server{
 		Addr:    args.RestEndpoint,
-		Handler: r,
+		Handler: router,
 	}
 	chanSig := make(chan os.Signal, 1)
 
-	if err := server.ListenAndServeGracefully(srv, chanSig); err != nil {
+	if err := server.ListenAndServeGracefully(httpServer, chanSig); err != nil {
 		panic(err)
 	}
 }

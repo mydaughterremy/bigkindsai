@@ -1,9 +1,17 @@
-package gpt
+package chat
+
+import (
+	"os"
+	"strings"
+)
 
 type GPTAPIType string
 
 const GPTAPITypeOpenAI GPTAPIType = "openai"
 const GPTAPITypeAzure GPTAPIType = "azure"
+
+const OpenAICompletionEndpoint = "https://api.openai.com/v1/chat/completions"
+const SolarCompletionEndpoint = "https://api.upstage.ai/v1/solar/chat/completions"
 
 type GptOptions struct {
 	Endpoint   string
@@ -29,12 +37,36 @@ type GptPredictionOptions struct {
 	Seed             *int64   `json:"seed"`
 }
 
+// 정보 필요함, 수정 필요함
+func GetModels() []string {
+	modelList, ok := os.LookupEnv("UPSTAGE_LLM_MODEL")
+	if !ok {
+		modelList = "upstage,2"
+	}
+	models := strings.Split(modelList, ",")
+	return models
+}
+func GetLLMOptions() []string {
+	modelList := os.Getenv("UPSTAGE_LLM_MODEL")
+	if modelList == "" {
+		modelList = "upstage/solar-mini"
+	}
+	models := strings.Split(modelList, "/")
+	return models
+}
+
 func (o *GptPredictionOptions) IsLLMOption() {}
 
 func NewGptOptions(opts ...func(*GptOptions)) *GptOptions {
-	options := &GptOptions{
-		Endpoint: openAIchatCompletion,
-		Models:   gptModels(),
+	options := &GptOptions{}
+	models := GetLLMOptions()
+	switch models[0] {
+	case "openai":
+		options.Endpoint = OpenAICompletionEndpoint
+		options.Models = gptModels()
+	case "upstage":
+		options.Endpoint = SolarCompletionEndpoint
+		options.Models = solarModels()
 	}
 
 	for _, opt := range opts {
@@ -80,6 +112,9 @@ func WithModels(models []string) func(*GptOptions) {
 
 func WithStreamEnabled(o *GptOptions) {
 	o.Streamable = true
+}
+func WithStreamDisabled(o *GptOptions) {
+	o.Streamable = false
 }
 
 func WithAPIType(apiType GPTAPIType) func(*GptOptions) {
@@ -163,6 +198,12 @@ func WithStream(o *GptPredictionOptions) {
 func WithSeed(seed int64) func(*GptPredictionOptions) {
 	return func(o *GptPredictionOptions) {
 		o.Seed = &seed
+	}
+}
+
+func solarModels() []string {
+	return []string{
+		"solar",
 	}
 }
 

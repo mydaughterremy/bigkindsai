@@ -25,70 +25,70 @@ type CreateChatCompletionRequest struct {
 	Provider string     `json:"provider"`
 }
 
-func (h *completionHandler) CreateChatCompletion(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (handler *completionHandler) CreateChatCompletion(responseWriter http.ResponseWriter, request *http.Request) {
+	context := request.Context()
 
-	var req CreateChatCompletionRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	var completionRequest CreateChatCompletionRequest
+	err := json.NewDecoder(request.Body).Decode(&completionRequest)
 
 	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 		return
 	}
 
-	var ch chan *service.CreateChatCompletionResult
+	var chatCompletionResult chan *service.CreateChatCompletionResult
 
-	payloads := make([]*chat.ChatPayload, 0, len(req.Messages))
-	for _, m := range req.Messages {
+	payloads := make([]*chat.ChatPayload, 0, len(completionRequest.Messages))
+	for _, message := range completionRequest.Messages {
 		payloads = append(payloads, &chat.ChatPayload{
-			Content: m.Content,
-			Role:    m.Role,
+			Content: message.Content,
+			Role:    message.Role,
 		})
 	}
 
-	ch, err = h.service.CreateChatCompletion(ctx,
+	chatCompletionResult, err = handler.service.CreateChatCompletion(context,
 		&service.CreateChatCompletionParameter{
 			Payloads: payloads,
-			Provider: req.Provider,
+			Provider: completionRequest.Provider,
 		})
 	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusInternalServerError, err)
 		return
 	}
 
-	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+	responseWriter.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
 	go func() {
-		defer wg.Done()
+		defer waitGroup.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-context.Done():
 				return
-			case result, ok := <-ch:
+			case result, ok := <-chatCompletionResult:
 				if !ok {
 					return
 				}
 				if result.Error != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, result.Error)
+					responseWriter.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(responseWriter, result.Error)
 					return
 				} else if result.Done {
-					_ = response.WriteStreamResponse(w, []byte("[DONE]"))
+					_ = response.WriteStreamResponse(responseWriter, []byte("[DONE]"))
 					return
 				}
 
 				b, err := json.Marshal(result.Completion)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, err)
+					responseWriter.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(responseWriter, err)
 					return
 				}
-				_ = response.WriteStreamResponse(w, b)
+				_ = response.WriteStreamResponse(responseWriter, b)
 			}
 		}
 	}()
 
-	wg.Wait()
+	waitGroup.Wait()
 }

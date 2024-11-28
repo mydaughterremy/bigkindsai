@@ -59,8 +59,8 @@ func TestGPTHttpRequest(t *testing.T) {
 		TestName string
 		// Option       *gpt.GptPredictionOptions
 		Context          context.Context
-		GptOption        []func(*gpt.GptOptions)
-		PredictionOption []func(*gpt.GptPredictionOptions)
+		GptOption        []func(*chat.GptOptions)
+		PredictionOption []func(*chat.GptPredictionOptions)
 		ChatMessages     []*chat.ChatPayload
 		ExpectedReq      string
 		ExpectedErr      error
@@ -68,20 +68,20 @@ func TestGPTHttpRequest(t *testing.T) {
 		{
 			TestName: "TestGPTHttpRequestWithOptions",
 			Context:  context.Background(),
-			GptOption: []func(*gpt.GptOptions){
-				gpt.WithKey(apiKey),
+			GptOption: []func(*chat.GptOptions){
+				chat.WithKey(apiKey),
 			},
-			PredictionOption: []func(*gpt.GptPredictionOptions){
-				gpt.WithModel("gpt-3.5-turbo-0613"),
-				gpt.WithFunctions([]string{
+			PredictionOption: []func(*chat.GptPredictionOptions){
+				chat.WithModel("gpt-3.5-turbo-0613"),
+				chat.WithFunctions([]string{
 					`{"name": "get_current_weather"}`,
 				}),
-				gpt.WithFunctionCall("auto"),
-				gpt.WithTemperature(0.1),
-				gpt.WithTopP(0.2),
-				gpt.WithMaxTokens(500),
-				gpt.WithPresencePenalty(0.3),
-				gpt.WithFrequencyPenalty(0.4),
+				chat.WithFunctionCall("auto"),
+				chat.WithTemperature(0.1),
+				chat.WithTopP(0.2),
+				chat.WithMaxTokens(500),
+				chat.WithPresencePenalty(0.3),
+				chat.WithFrequencyPenalty(0.4),
 			},
 			ChatMessages: []*chat.ChatPayload{
 				{
@@ -135,24 +135,24 @@ func TestGPTHttpRequest(t *testing.T) {
 		{
 			TestName: "TestGPTHttpRequestCustomEndpoint",
 			Context:  metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{"X-Forwarded-For-Foo": "Bar"})),
-			GptOption: []func(*gpt.GptOptions){
-				gpt.WithCustomEndpoint("http://upstage.ai"),
-				gpt.WithModels([]string{
+			GptOption: []func(*chat.GptOptions){
+				chat.WithCustomEndpoint("http://upstage.ai"),
+				chat.WithModels([]string{
 					"up-llm-1",
 					"up-llm-2",
 				}),
 			},
-			PredictionOption: []func(*gpt.GptPredictionOptions){
-				gpt.WithModel("up-llm-1"),
-				gpt.WithFunctions([]string{
+			PredictionOption: []func(*chat.GptPredictionOptions){
+				chat.WithModel("up-llm-1"),
+				chat.WithFunctions([]string{
 					`{"name": "my_function"}`,
 				}),
-				gpt.WithFunctionCall(`{"name": "my_function"}`),
-				gpt.WithTemperature(0.2),
-				gpt.WithTopP(0.4),
-				gpt.WithMaxTokens(1024),
-				gpt.WithPresencePenalty(0.6),
-				gpt.WithFrequencyPenalty(0.8),
+				chat.WithFunctionCall(`{"name": "my_function"}`),
+				chat.WithTemperature(0.2),
+				chat.WithTopP(0.4),
+				chat.WithMaxTokens(1024),
+				chat.WithPresencePenalty(0.6),
+				chat.WithFrequencyPenalty(0.8),
 			},
 			ChatMessages: []*chat.ChatPayload{
 				{
@@ -217,7 +217,7 @@ func TestGPTHttpRequest(t *testing.T) {
 			testHttpClient := NewTestClient(roundTripper)
 
 			// create Model
-			gptModel, err := gpt.NewGPTCompitable(testHttpClient, gpt.WithKey(apiKey))
+			gptModel, err := gpt.NewGPTCompitable(testHttpClient, chat.WithKey(apiKey))
 			if err != nil {
 				if err != nil && tt.ExpectedErr == nil || err == nil && tt.ExpectedErr != nil {
 					t.Fatalf("Expected error %v, got %v", tt.ExpectedErr, err)

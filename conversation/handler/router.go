@@ -13,7 +13,7 @@ import (
 )
 
 func NewRouter() chi.Router {
-	r := chi.NewRouter()
+	router := chi.NewRouter()
 
 	functionService := &function.FunctionService{}
 
@@ -29,22 +29,29 @@ func NewRouter() chi.Router {
 		functionService,
 		tokenCounter,
 	)
+	topicService := service.NewTopicService()
 
 	completionHandler := &completionHandler{
 		service: completionService,
 	}
+	topicHandler := &topicHandler{
+		service: topicService,
+	}
 
-	r.Use(log.RequestLogMiddleware)
-	r.Use(log.ResponseLogMiddleware)
+	router.Use(log.RequestLogMiddleware)
+	router.Use(log.ResponseLogMiddleware)
 
-	r.Route("/v1", func(r chi.Router) {
-		r.Post("/chat/completions", completionHandler.CreateChatCompletion)
+	router.Route("/v1", func(router chi.Router) {
+		router.Post("/chat/completions", completionHandler.CreateChatCompletion)
+	})
+	router.Route("/v2", func(router chi.Router) {
+		router.Post("/topic", topicHandler.handleTopic)
 	})
 
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
 
-	return r
+	return router
 }

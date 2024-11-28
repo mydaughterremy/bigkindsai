@@ -17,7 +17,6 @@ import (
 	"bigkinds.or.kr/backend/handler"
 	"bigkinds.or.kr/backend/internal/db"
 	"bigkinds.or.kr/backend/internal/server"
-	"bigkinds.or.kr/backend/model"
 )
 
 var args struct {
@@ -66,22 +65,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	mysqlDB.AutoMigrate(&model.QA{})
-	mysqlDB.AutoMigrate(&model.Chat{})
 
 	writer := NewWriter()
 	defer writer.Close()
 
-	r := handler.NewRouter(mysqlDB, writer)
+	router := handler.NewRouter(mysqlDB, writer)
 	log.Println("Starting server on", args.RestEndpoint)
 
-	srv := &http.Server{
+	restServer := &http.Server{
 		Addr:    args.RestEndpoint,
-		Handler: r,
+		Handler: router,
 	}
-	chanSig := make(chan os.Signal, 1)
+	channelSignal := make(chan os.Signal, 1)
 
-	if err := server.ListenAndServeGracefully(srv, chanSig); err != nil {
+	if err := server.ListenAndServeGracefully(restServer, channelSignal); err != nil {
 		panic(err)
 	}
 }

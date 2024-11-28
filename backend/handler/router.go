@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"github.com/go-chi/chi/v5"
+	"github.com/segmentio/kafka-go"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/segmentio/kafka-go"
 	"gorm.io/gorm"
 
 	"bigkinds.or.kr/backend/middleware/auth"
@@ -16,19 +16,19 @@ import (
 )
 
 func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
-	kst, err := time.LoadLocation("Asia/Seoul")
+	koreanStandardTime, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
 		panic(err)
 	}
 
-	r := chi.NewRouter()
+	router := chi.NewRouter()
 	authenticator := auth.Authenticator{
 		AuthService: &service.AuthService{},
 	}
 
 	chatService := &service.ChatService{
 		ChatRepository: repository.NewChatRepository(db),
-		QARepository:   repository.NewQARepository(db, kst),
+		QARepository:   repository.NewQARepository(db, koreanStandardTime),
 	}
 
 	questionGuidesService := &service.QuestionGuidesService{}
@@ -49,13 +49,13 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 	statisticsHandler := &StatisticsHandler{
 		StatisticsService: &service.StatisticsService{
-			Repository: repository.NewQARepository(db, kst),
+			Repository: repository.NewQARepository(db, koreanStandardTime),
 		},
 	}
 
 	qaHandler := &qaHandler{
 		service: &service.QAService{
-			Repository: repository.NewQARepository(db, kst),
+			Repository: repository.NewQARepository(db, koreanStandardTime),
 		},
 	}
 
@@ -71,59 +71,59 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		service: &service.TutorialService{},
 	}
 
-	r.Use(log.RequestLogMiddleware)
-	r.Use(log.ResponseLogMiddleware)
+	router.Use(log.RequestLogMiddleware)
+	router.Use(log.ResponseLogMiddleware)
 
-	r.Route("/v1", func(r chi.Router) {
-		r.Route("/chats", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Post("/{chat_id}/completions", completionHandler.CreateChatCompletion)
-			r.Get("/{chat_id}/qas", chatHandler.ListChatQAs)
-			r.Post("/", chatHandler.CreateChat)
-			r.Get("/", chatHandler.ListChats)
-			r.Delete("/{chat_id}", chatHandler.DeleteChat)
-			r.Put("/{chat_id}", chatHandler.UpdateChatTitle)
+	router.Route("/v1", func(router chi.Router) {
+		router.Route("/chats", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Post("/{chat_id}/completions", completionHandler.CreateChatCompletion)
+			router.Get("/{chat_id}/qas", chatHandler.ListChatQAs)
+			router.Post("/", chatHandler.CreateChat)
+			router.Get("/", chatHandler.ListChats)
+			router.Delete("/{chat_id}", chatHandler.DeleteChat)
+			router.Put("/{chat_id}", chatHandler.UpdateChatTitle)
 		})
-		r.Route("/recommended_questions", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Get("/", GetRecommendedQuestions)
+		router.Route("/recommended_questions", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", GetRecommendedQuestions)
 		})
-		r.Route("/question-guides", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Get("/", questionGuidesHandler.GetQuestionGuides)
-			r.Get("/tips", questionGuidesHandler.GetQuestionGuidesTips)
+		router.Route("/question-guides", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", questionGuidesHandler.GetQuestionGuides)
+			router.Get("/tips", questionGuidesHandler.GetQuestionGuidesTips)
 		})
-		r.Route("/tutorial", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Get("/", tutorialHandler.GetTutorial)
+		router.Route("/tutorial", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", tutorialHandler.GetTutorial)
 		})
-		r.Route("/statistics", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Get("/", statisticsHandler.GetStatistics)
+		router.Route("/statistics", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", statisticsHandler.GetStatistics)
 		})
-		r.Route("/qas", func(r chi.Router) {
-			r.Use(authenticator.AuthMiddleware)
-			r.Get("/", qaHandler.ListQAsWithPagination)
-			r.Delete("/", qaHandler.DeleteQAs)
-			r.Post("/delete", qaHandler.DeleteQAs)
-			r.Route("/{qa_id}", func(r chi.Router) {
-				r.Get("/", qaHandler.GetQA)
-				r.Delete("/", qaHandler.DeleteQA)
+		router.Route("/qas", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", qaHandler.ListQAsWithPagination)
+			router.Delete("/", qaHandler.DeleteQAs)
+			router.Post("/delete", qaHandler.DeleteQAs)
+			router.Route("/{qa_id}", func(router chi.Router) {
+				router.Get("/", qaHandler.GetQA)
+				router.Delete("/", qaHandler.DeleteQA)
 
-				r.Route("/vote", func(r chi.Router) {
-					r.Get("/", qaHandler.GetVote)
-					r.Put("/up", qaHandler.UpvoteQA)
-					r.Put("/down", qaHandler.DownvoteQA)
-					r.Delete("/", qaHandler.DeleteVote)
+				router.Route("/vote", func(router chi.Router) {
+					router.Get("/", qaHandler.GetVote)
+					router.Put("/up", qaHandler.UpvoteQA)
+					router.Put("/down", qaHandler.DownvoteQA)
+					router.Delete("/", qaHandler.DeleteVote)
 				})
 			})
 		})
 	})
 
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+	router.Get("/healthz", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.WriteHeader(http.StatusOK)
+		_, _ = responseWriter.Write([]byte("OK"))
 	})
 
-	return r
+	return router
 }

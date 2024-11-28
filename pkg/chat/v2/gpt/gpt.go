@@ -20,13 +20,11 @@ const AuthorizationTypeApiKeyHeader = "ApiKeyHeader"
 type GPT struct {
 	// config
 	Client *http.Client
-	Option *GptOptions
+	Option *chat.GptOptions
 }
 
-const openAIchatCompletion = "https://api.openai.com/v1/chat/completions"
-
-func NewGPTCompitable(client *http.Client, opts ...func(*GptOptions)) (*GPT, error) {
-	options := NewGptOptions(opts...)
+func NewGPTCompitable(client *http.Client, opts ...func(*chat.GptOptions)) (*GPT, error) {
+	options := chat.NewGptOptions(opts...)
 
 	if client == nil {
 		return nil, errors.New("client is required")
@@ -50,7 +48,7 @@ func (c *GPT) AvailableModels() []string {
 	return c.Option.Models
 }
 
-func (g *GPT) createRequest(ctx context.Context, messages []*chat.ChatPayload, options GptPredictionOptions) (*http.Request, error) {
+func (g *GPT) CreateRequest(ctx context.Context, messages []*chat.ChatPayload, options chat.GptPredictionOptions) (*http.Request, error) {
 	var (
 		functions         []*json.RawMessage
 		rawFunctionCall   json.RawMessage
@@ -183,7 +181,7 @@ func (g *GPT) createRequest(ctx context.Context, messages []*chat.ChatPayload, o
 		return nil, err
 	}
 	if g.Option.ApiKey != "" {
-		if g.Option.ApiType == GPTAPITypeAzure {
+		if g.Option.ApiType == chat.GPTAPITypeAzure {
 			req.Header.Set("api-key", g.Option.ApiKey)
 		} else {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", g.Option.ApiKey))
@@ -195,10 +193,159 @@ func (g *GPT) createRequest(ctx context.Context, messages []*chat.ChatPayload, o
 	return req, nil
 }
 
-func (c *GPT) Chat(ctx context.Context, messages []*chat.ChatPayload, opts ...func(o *GptPredictionOptions)) (response *chat.ChatResponse, err error) {
-	option := NewGptPredictionOptions(opts...)
+func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPayload, options chat.GptPredictionOptions) (*http.Request, error) {
+	var (
+		functions         []*json.RawMessage
+		rawFunctionCall   json.RawMessage
+		tools             []*json.RawMessage
+		rawToolChoice     json.RawMessage
+		rawResponseFormat json.RawMessage
+	)
 
-	req, err := c.createRequest(ctx, messages, *option)
+	if len(messages) == 0 {
+		return nil, errors.New("messages is required")
+	}
+
+	if options.Model == "" {
+		return nil, errors.New("model is required")
+	}
+
+	var solarMessages []ChatCompletionMessage
+
+	for _, chatPayload := range messages {
+
+		message := ChatCompletionMessage{
+			Role:    chatPayload.Role,
+			Content: chatPayload.Content,
+		}
+		if chatPayload.Name != nil {
+			message.Name = *chatPayload.Name
+		}
+		if chatPayload.FunctionCall != nil {
+			message.FunctionCall = &ChatCompletionFunctionCallResp{
+				Name:      chatPayload.FunctionCall.Name,
+				Arguments: chatPayload.FunctionCall.Arguments,
+			}
+		}
+		if chatPayload.ToolCalls != nil {
+			message.ToolCalls = make([]*ChatCompletionToolsResp, len(chatPayload.ToolCalls))
+			for i, toolCall := range chatPayload.ToolCalls {
+				message.ToolCalls[i] = &ChatCompletionToolsResp{
+					Id:   toolCall.Id,
+					Type: toolCall.Type,
+				}
+				if toolCall.Function != nil {
+					message.ToolCalls[i].Function = &ChatCompletionFunctionCallResp{
+						Name:      toolCall.Function.Name,
+						Arguments: toolCall.Function.Arguments,
+					}
+				}
+			}
+		}
+		if chatPayload.ToolCallID != "" {
+			message.ToolCallID = chatPayload.ToolCallID
+		}
+		solarMessages = append(solarMessages, message)
+
+	}
+	// 수정
+	//if options.Functions != nil {
+	//	rawFunctions := make([]*json.RawMessage, len(options.Functions))
+	//	for i, function := range options.Functions {
+	//		rm := json.RawMessage(function)
+	//		rawFunctions[i] = &rm
+	//	}
+	//	functions = rawFunctions
+	//}
+	if options.Functions != nil {
+		tools = make([]*json.RawMessage, len(options.Functions))
+		for i, function := range options.Functions {
+			// 함수를 tool 형식으로 변환
+			toolStr := fmt.Sprintf(`{"type":"function","function":%s}`, function)
+			rm := json.RawMessage(toolStr)
+			tools[i] = &rm
+		}
+	}
+
+	if options.FunctionCall != nil {
+		// json.RawMessage should be wrapped with double quotes or braces
+		if !strings.HasPrefix(*options.FunctionCall, "{") {
+			*options.FunctionCall = fmt.Sprintf("\"%s\"", *options.FunctionCall)
+		}
+		rawFunctionCall = json.RawMessage(*options.FunctionCall)
+	}
+	// tool call
+	//if options.Tools != nil {
+	//	rawTools := make([]*json.RawMessage, len(options.Tools))
+	//	for i, tool := range options.Tools {
+	//		rm := json.RawMessage(tool)
+	//		rawTools[i] = &rm
+	//	}
+	//	tools = rawTools
+	//}
+
+	if options.ToolChoice != nil {
+		// json.RawMessage should be wrapped with double quotes or braces
+		if !strings.HasPrefix(*options.ToolChoice, "{") {
+			*options.ToolChoice = fmt.Sprintf("\"%s\"", *options.ToolChoice)
+		}
+		rawToolChoice = json.RawMessage(*options.ToolChoice)
+	}
+
+	// response format
+	if options.ResponseFormat != nil {
+		err := fastjson.Validate(*options.ResponseFormat)
+		if err != nil {
+			logrus.Errorf("invalid JSON: %s, error: %v", *options.ResponseFormat, err)
+			return nil, err
+		}
+		rawResponseFormat = json.RawMessage(*options.ResponseFormat)
+	}
+
+	solarQuery := ChatCompletion{
+		Model:            options.Model,
+		Messages:         solarMessages,
+		Functions:        functions,
+		FunctionCall:     rawFunctionCall,
+		Tools:            tools,
+		ToolChoice:       rawToolChoice,
+		Temperature:      options.Temperature,
+		TopP:             options.TopP,
+		MaxTokens:        options.MaxTokens,
+		PresencePenalty:  options.PresencePenalty,
+		FrequencyPenalty: options.FrequencyPenalty,
+		ResponseFormat:   rawResponseFormat,
+		Stream:           options.Stream,
+		Seed:             options.Seed,
+	}
+
+	queryBytes, err := json.Marshal(solarQuery)
+
+	if err != nil {
+		logrus.Errorf("error marshalling gpt query: %s", err)
+		return nil, err
+	}
+
+	// send request to openai
+	targetUrl := c.Option.Endpoint
+
+	req, err := http.NewRequestWithContext(ctx, "POST", targetUrl, bytes.NewReader(queryBytes))
+	if err != nil {
+		logrus.Errorf("error creating request: %s", err)
+		return nil, err
+	}
+	if c.Option.ApiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Option.ApiKey))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	chat.AddForwardHeadersFromIncomingContext(&ctx, &req.Header)
+	return req, nil
+}
+
+func (c *GPT) Chat(ctx context.Context, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (response *chat.ChatResponse, err error) {
+	option := chat.NewGptPredictionOptions(opts...)
+
+	req, err := c.CreateRequest(ctx, messages, *option)
 	if err != nil {
 		logrus.Errorf("error creating request: %s", err)
 		return nil, err

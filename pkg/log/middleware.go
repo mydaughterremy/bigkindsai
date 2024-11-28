@@ -113,6 +113,6 @@ func printResponseLog(r *http.Request, logger *zap.Logger, requestId string, res
 	}
 
 	fields.RequestID = requestId
-
+	// 수정
 	//logger.Info("http response", fields.ZapField())
 }

@@ -1,12 +1,11 @@
 package function
 
 import (
+	"bigkinds.or.kr/conversation/model"
+	"bigkinds.or.kr/pkg/utils"
 	"context"
 	"encoding/json"
 	"errors"
-
-	"bigkinds.or.kr/conversation/model"
-	"bigkinds.or.kr/pkg/utils"
 )
 
 var IndependentCallError = errors.New("this function should be called independently not as a part of a pipeline")

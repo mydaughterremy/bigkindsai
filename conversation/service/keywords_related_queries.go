@@ -1,18 +1,25 @@
 package service
 
 import (
+	"bigkinds.or.kr/conversation/internal/llmclient"
+	"bigkinds.or.kr/pkg/chat/v2"
+	"bigkinds.or.kr/pkg/chat/v2/gpt"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai"
+	"io"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"bigkinds.or.kr/conversation/internal/token_counter"
 	"bigkinds.or.kr/conversation/model"
-	"github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai"
 )
 
 const maxRetries = 3
@@ -21,7 +28,9 @@ type KeywordsRelatedQueriesService struct {
 	tokenCounter *token_counter.TokenCounter
 }
 
+// 수정
 func getKeywordQuery(sargs string) (string, error) {
+	sargs = strings.Replace(sargs, `"query"`, `"standalone_query"`, 1)
 	var margs map[string]interface{}
 	err := json.Unmarshal([]byte(sargs), &margs)
 	if err != nil {
@@ -34,7 +43,119 @@ func getKeywordQuery(sargs string) (string, error) {
 	return keywordQuery, nil
 }
 
-func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx context.Context, provider, modelName, arguments string) (*model.KeywordsRelatedQueries, int, error) {
+// 수정
+func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueriesSolar(ctx context.Context, modelName string, arguments string) (*model.KeywordsRelatedQueries, int, error) {
+	models := chat.GetLLMOptions()
+	llm, err := llmclient.NewSolarClient(&http.Client{
+		Timeout: 10 * time.Second, // 타임아웃 설정
+	}, models[1],
+		func(o *chat.GptOptions) {
+			o.Streamable = false
+		})
+
+	opts := make([]func(options *chat.GptPredictionOptions), 0)
+	opts = append(opts, chat.WithModel(modelName))
+
+	// set seed
+	seed, ok := os.LookupEnv("UPSTAGE_LLM_SEED")
+	if ok {
+		seedInt, err := strconv.ParseInt(seed, 10, 64)
+		if err == nil {
+			opts = append(opts, chat.WithSeed(seedInt))
+		} else {
+			return nil, 0, fmt.Errorf("invalid seed: %s", seed)
+		}
+	}
+
+	// set temperature
+	var temperature float32 = 0
+	temperatureString, ok := os.LookupEnv("UPSTAGE_LLM_TEMPERATURE")
+	if ok {
+		var err error
+		temperatureFloat64, err := strconv.ParseFloat(temperatureString, 32)
+		if err != nil {
+			log.Printf("invalid temperature from env: %s", temperatureString)
+		}
+		temperature = float32(temperatureFloat64)
+		opts = append(opts, chat.WithTemperature(temperature))
+	}
+
+	predictOptions := chat.NewGptPredictionOptions(opts...)
+
+	// get keyword query
+	keywordQuery, err := getKeywordQuery(arguments)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	messages := []*chat.ChatPayload{
+		{
+			Role:    "system",
+			Content: getKeywordPrompt(keywordQuery),
+		},
+		{
+			Role:    "user",
+			Content: keywordQuery,
+		},
+	}
+	// set messages
+	tokenCount := 0
+	for i := 0; i < maxRetries; i++ {
+		request, err := llm.CreateRequestSolar(ctx, messages, *predictOptions)
+		if err != nil {
+			fmt.Println("error create request")
+			continue
+		}
+		llmResp, err := llm.Client.Do(request)
+		if err != nil {
+			return nil, tokenCount, err
+		}
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				slog.Error("error body")
+			}
+		}(llmResp.Body)
+
+		bodyBytes, err := io.ReadAll(llmResp.Body)
+		if err != nil {
+			continue
+		}
+
+		var resp gpt.ChatCompletionResponse
+		var keywordsRelatedQueries model.KeywordsRelatedQueries
+
+		if err := json.Unmarshal(bodyBytes, &resp); err != nil {
+			slog.Error("failed to parse solar response", "error", err)
+			continue
+		}
+
+		tokenCount += k.tokenCounter.CountTokens(getKeywordPrompt(keywordQuery))
+
+		if len(resp.Choices) == 0 {
+			return nil, tokenCount, errors.New("no choices in response")
+		}
+
+		if resp.Choices[0].FinishReason == "stop" {
+			if resp.Choices[0].Message.Content != "" {
+				content := resp.Choices[0].Message.Content
+				err = json.Unmarshal([]byte(content), &keywordsRelatedQueries)
+				if err != nil {
+					slog.Error("keywords queries", "error", err)
+					return nil, tokenCount, err
+				}
+				tokenCount += k.tokenCounter.CountTokens(content)
+			}
+		}
+
+		if len(keywordsRelatedQueries.Keywords) > 0 && len(keywordsRelatedQueries.RelatedQueries) > 0 {
+			return &keywordsRelatedQueries, tokenCount, nil
+		}
+	}
+	return nil, tokenCount, fmt.Errorf("failed to get keywords and related queries, max retries: %d", maxRetries)
+}
+
+func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueriesGpt(ctx context.Context, provider, modelName, arguments string) (*model.KeywordsRelatedQueries, int, error) {
 	client, err := NewLLMClient(provider, modelName)
 	if err != nil {
 		return nil, 0, err
@@ -42,7 +163,7 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx conte
 	chatCompletionOptions := newChatCompletionOptions()
 
 	// set seed
-	seed, ok := os.LookupEnv("UPSTAGE_OPENAI_SEED")
+	seed, ok := os.LookupEnv("UPSTAGE_LLM_SEED")
 	if ok {
 		seedInt, err := strconv.ParseInt(seed, 10, 64)
 		if err == nil {
@@ -54,7 +175,7 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx conte
 
 	// set temperature
 	var temperature float32 = 0
-	temperatureString, ok := os.LookupEnv("UPSTAGE_OPENAI_TEMPERATURE")
+	temperatureString, ok := os.LookupEnv("UPSTAGE_LLM_TEMPERATURE")
 	if ok {
 		var err error
 		temperatureFloat64, err := strconv.ParseFloat(temperatureString, 32)
@@ -78,12 +199,10 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx conte
 	}
 	// set messages
 	messages := []azopenai.ChatRequestMessageClassification{
-		&azopenai.ChatRequestUserMessage{Content: azopenai.NewChatRequestUserMessageContent(getPrompt(keywordQuery))},
+		&azopenai.ChatRequestUserMessage{Content: azopenai.NewChatRequestUserMessageContent(getKeywordPrompt(keywordQuery))},
 	}
 	chatCompletionOptions.SetMessages(messages)
 	tokenCount := 0
-	asd, err := json.Marshal(chatCompletionOptions)
-	fmt.Println(string(asd))
 
 	for i := 0; i < maxRetries; i++ {
 		slog.Info("try to generate keywords and relatedQueries", "keywordQuery", keywordQuery, "count", i)
@@ -92,7 +211,7 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx conte
 		if err != nil {
 			return nil, tokenCount, err
 		}
-		tokenCount += k.tokenCounter.CountTokens(getPrompt(keywordQuery))
+		tokenCount += k.tokenCounter.CountTokens(getKeywordPrompt(keywordQuery))
 		if len(resp.Choices) == 0 {
 			return nil, tokenCount, errors.New("no choices in response")
 		}
@@ -121,8 +240,10 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueries(ctx conte
 	return nil, tokenCount, fmt.Errorf("failed to get keywords and related queries, max retries: %d", maxRetries)
 }
 
-func getPrompt(keywordQuery string) string {
+// 수정
+func getKeywordPrompt(keywordQuery string) string {
 	return fmt.Sprintf(`Please follow below instructions.
+0) Your responses "should be" in Korean.
 1) Generate <keywords> to represent <question: %s>.
     - One word that best represents the question.
     - Please generate it with two or fewer.

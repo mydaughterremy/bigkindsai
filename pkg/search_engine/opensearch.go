@@ -15,6 +15,7 @@ import (
 var once sync.Once
 var openSearchClient *opensearch.Client
 
+// opensearch 수정
 func InitializeSingletonOpenSearchClient(addressString, username, password string) (*opensearch.Client, error) {
 	var err error
 	once.Do(func() {
@@ -28,11 +29,9 @@ func InitializeSingletonOpenSearchClient(addressString, username, password strin
 				ResponseHeaderTimeout: 60 * time.Second,
 				TLSHandshakeTimeout:   1 * time.Second,
 				MaxIdleConnsPerHost:   128,
-				// 수정
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-
 			},
 		})
 

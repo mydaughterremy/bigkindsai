@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"bigkinds.or.kr/pkg/chat/v2"
 	"github.com/sirupsen/logrus"
@@ -15,21 +16,30 @@ import (
 
 type ChatStream interface {
 	ReadUntilNow() *ChatCompletionResponse
-	Recv() (*chat.ChatResponse, error)
+	Recv(provider string) (*chat.ChatResponse, error)
 	Close() error
 }
 
-func (c *GPT) CreateChatStream(ctx context.Context, messages []*chat.ChatPayload, opts ...func(o *GptPredictionOptions)) (ChatStream, error) {
+func (c *GPT) CreateChatStream(ctx context.Context, provider string, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (ChatStream, error) {
 
-	options := NewGptPredictionOptions(opts...)
+	options := chat.NewGptPredictionOptions(opts...)
 
 	if !c.Option.Streamable {
 		return nil, fmt.Errorf("model %s cannot stream", options.Model)
 	}
-	jsonData, err := json.Marshal(messages)
-	fmt.Println(string(jsonData))
 
-	req, err := c.createRequest(ctx, messages, *options)
+	var (
+		req *http.Request
+		err error
+	)
+
+	switch provider {
+	case "upstage":
+		req, err = c.CreateRequestSolar(ctx, messages, *options)
+	case "openai":
+		req, err = c.CreateRequest(ctx, messages, *options)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +63,41 @@ func (c *GPT) CreateChatStream(ctx context.Context, messages []*chat.ChatPayload
 		body:   resp.Body,
 	}, nil
 }
+func (c *GPT) CreateChat(ctx context.Context, provider string, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (*http.Response, error) {
+	options := chat.NewGptPredictionOptions(opts...)
+
+	var (
+		req *http.Request
+		err error
+	)
+
+	switch provider {
+	case "upstage":
+		req, err = c.CreateRequestSolar(ctx, messages, *options)
+	case "openai":
+		req, err = c.CreateRequest(ctx, messages, *options)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 300 {
+		body, err := io.ReadAll(resp.Body)
+		defer resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("response status code is not in 200-299, status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return resp, nil
+}
 
 type ChatGPTStreamToken string
 
@@ -72,7 +117,7 @@ func (c *GPTStream) Close() error {
 	return c.body.Close()
 }
 
-func (c *GPTStream) Recv() (*chat.ChatResponse, error) {
+func (c *GPTStream) Recv(provider string) (*chat.ChatResponse, error) {
 	shouldbeMerged := false // determine if all response should be merged although this is stream mode. ex) function call argument
 	isError := false
 	errorRawMessage := ""
@@ -80,14 +125,17 @@ func (c *GPTStream) Recv() (*chat.ChatResponse, error) {
 	for {
 		resp, err := c.reader.ReadBytes('\n')
 		logrus.Debugf("resp: %s", string(resp))
-		if errors.Is(err, io.EOF) {
-			if isError {
-				return nil, errors.New(errorRawMessage)
+
+		if provider != "upstage" {
+			if errors.Is(err, io.EOF) {
+				if isError {
+					return nil, errors.New(errorRawMessage)
+				}
+				return nil, errors.New("EOF comes before [DONE]")
 			}
-			return nil, errors.New("EOF comes before [DONE]")
-		}
-		if err != nil {
-			return nil, err
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		resp = bytes.TrimSpace(resp)
@@ -124,8 +172,6 @@ func (c *GPTStream) Recv() (*chat.ChatResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		jsonData, err := json.Marshal(chunk)
-		fmt.Println(string(jsonData))
 
 		if len(chunk.Choices) < 1 {
 			continue

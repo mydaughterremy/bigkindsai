@@ -1,6 +1,7 @@
 package llmclient
 
 import (
+	"bigkinds.or.kr/pkg/chat/v2"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,18 +10,18 @@ import (
 	"bigkinds.or.kr/pkg/chat/v2/gpt"
 )
 
-func NewOpenAIClient(client *http.Client, model string, opts ...func(*gpt.GptOptions)) (*gpt.GPT, error) {
+func NewOpenAIClient(client *http.Client, model string, opts ...func(*chat.GptOptions)) (*gpt.GPT, error) {
 	key := os.Getenv("UPSTAGE_OPENAI_KEY")
 
 	opts = append(
 		opts,
-		gpt.WithCustomEndpoint("https://api.openai.com/v1/chat/completions"),
-		gpt.WithKey(key),
-		gpt.WithModels([]string{model}),
-		gpt.WithAPIType(gpt.GPTAPITypeOpenAI),
+		chat.WithCustomEndpoint("https://api.openai.com/v1/chat/completions"),
+		chat.WithKey(key),
+		chat.WithModels([]string{model}),
+		chat.WithAPIType(chat.GPTAPITypeOpenAI),
 	)
 
-	options := gpt.NewGptOptions(opts...)
+	options := chat.NewGptOptions(opts...)
 
 	return &gpt.GPT{
 		Client: client,
@@ -28,7 +29,7 @@ func NewOpenAIClient(client *http.Client, model string, opts ...func(*gpt.GptOpt
 	}, nil
 }
 
-func NewAzureClient(client *http.Client, model string, keyIndex int, opts ...func(*gpt.GptOptions)) (*gpt.GPT, error) {
+func NewAzureClient(client *http.Client, model string, keyIndex int, opts ...func(*chat.GptOptions)) (*gpt.GPT, error) {
 	endpointKeyMap := os.Getenv("UPSTAGE_AZURE_ENDPOINT_KEY_MAP")
 	if endpointKeyMap == "" {
 		return nil, fmt.Errorf("endpoint key map is not in env")
@@ -42,13 +43,13 @@ func NewAzureClient(client *http.Client, model string, keyIndex int, opts ...fun
 	endpoint, key := splited[0], splited[1]
 	opts = append(
 		opts,
-		gpt.WithCustomEndpoint(endpoint),
-		gpt.WithKey(key),
-		gpt.WithModels([]string{model}),
-		gpt.WithAPIType(gpt.GPTAPITypeAzure),
+		chat.WithCustomEndpoint(endpoint),
+		chat.WithKey(key),
+		chat.WithModels([]string{model}),
+		chat.WithAPIType(chat.GPTAPITypeAzure),
 	)
 
-	options := gpt.NewGptOptions(opts...)
+	options := chat.NewGptOptions(opts...)
 
 	return &gpt.GPT{
 		Client: client,
@@ -56,12 +57,32 @@ func NewAzureClient(client *http.Client, model string, keyIndex int, opts ...fun
 	}, nil
 }
 
-func NewClient(client *http.Client, provider string, model string, keyIndex int, opts func(*gpt.GptOptions)) (*gpt.GPT, error) {
+func NewSolarClient(client *http.Client, model string, opts ...func(options *chat.GptOptions)) (*gpt.GPT, error) {
+	key := os.Getenv("UPSTAGE_SOLAR_KEY")
+
+	opts = append(
+		opts,
+		chat.WithCustomEndpoint("https://api.upstage.ai/v1/solar/chat/completions"),
+		chat.WithKey(key),
+		chat.WithModels([]string{model}),
+	)
+
+	options := chat.NewGptOptions(opts...)
+
+	return &gpt.GPT{
+		Client: client,
+		Option: options,
+	}, nil
+}
+
+func NewClient(client *http.Client, provider string, model string, keyIndex int, opts func(*chat.GptOptions)) (*gpt.GPT, error) {
 	switch provider {
 	case "openai":
 		return NewOpenAIClient(client, model, opts)
 	case "azure":
 		return NewAzureClient(client, model, keyIndex, opts)
+	case "upstage":
+		return NewSolarClient(client, model, opts)
 	default:
 		return nil, fmt.Errorf("invalid provider: %s", provider)
 	}

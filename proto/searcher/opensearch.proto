@@ -22,7 +22,7 @@ message OpenSearchSearcher {
     }
 
     message VectorQueryStrategy {
-        message KNNStrategy {
+         message KNNStrategy {
             string field = 1 [(validate.rules).string.min_len = 1];
             string source_field = 2;
             int32 k = 3;

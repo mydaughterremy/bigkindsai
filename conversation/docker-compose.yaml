@@ -1,14 +1,14 @@
 services:
-  bigkinds-ai-backend:
+  bigkinds-ai-conversation:
     image: golang:1.21
-    container_name: bigkidnds-ai-backend
+    container_name: bigkidnds-ai-conversation
     volumes:
       - .:/src/
     ports:
-      - 8080:8080
+      - 8081:8081
     networks:
       - bigkinds-network
     command:
-      - "cd /src/; go run ."
+      - "cd /src/; go run . --rest-endpoint=:8081"
 networks:
   bigkinds-network:

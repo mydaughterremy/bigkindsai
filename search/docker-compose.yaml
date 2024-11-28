@@ -1,0 +1,15 @@
+services:
+  bigkinds-ai-search:
+    image: golang:1.21
+    container_name: bigkidnds-ai-search
+    volumes:
+      - .:/src/
+    ports:
+      - 8082:8082
+      - 8083:8083
+    networks:
+      - bigkinds-network
+    command:
+      - "cd /src/; go run . -r=0.0.0.0:8082 -g=0.0.0.0:8083"
+networks:
+  bigkinds-network:

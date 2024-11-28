@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -48,6 +50,7 @@ func getReranker(provider provider.Provider[pr.Reranker], reranker string) (pr.R
 func getRerankQuery(req *proto.SearchRequest, rerankerConfig *proto.Reranker) (string, error) {
 	var rerankQuery string
 	var ok bool
+
 	switch src := rerankerConfig.QuerySource.Source; src.(type) {
 	case *proto.Reranker_QuerySource_RawQuery_:
 		rerankQuery = req.RawQuery
@@ -73,11 +76,11 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 	if err != nil {
 		logger, _ = log.NewLogger("search")
 	}
-
 	// consider reranker
 	originalTopk := req.Size
 	if searchConfig.Reranker != nil {
-		req.Size = req.Size * 20 // if reranker is enabled, search 20x more items
+		//req.Size = req.Size * 20 // if reranker is enabled, search 20x more items
+		req.Size = req.Size * 5
 	}
 
 	searcherStartTime := time.Now()
@@ -90,10 +93,20 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 	// rerank
 
 	if rerankerConfig := searchConfig.Reranker; rerankerConfig != nil {
+		key := os.Getenv("UPSTAGE_EMBEDDING_KEY")
+		url := os.Getenv("UPSTAGE_EMBEDDING_URL")
+
 		rerankerStartTime := time.Now()
-		reranker, err := getReranker(s.RerankerProvider, rerankerConfig.RerankerType)
-		if err != nil {
-			return nil, err
+		//reranker, err := getReranker(s.RerankerProvider, rerankerConfig.RerankerType)
+		//if err != nil {
+		//	return nil, err
+		//}
+		reranker := &pr.SolarReranker{
+			Embedder: &pr.SolarEmbedding{
+				Client:  &http.Client{},
+				ApiKey:  key,
+				BaseURL: url,
+			},
 		}
 
 		// create rerank query
@@ -102,8 +115,11 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 			return nil, err
 		}
 
-		rerankedItems, err := reranker.Rerank(ctx, rerankerConfig, rerankQuery, items, originalTopk)
-		if err == pr.ErrRerankerTimeout {
+		//rerankedItems, err := reranker.Rerank(ctx, rerankerConfig, rerankQuery, items, originalTopk)
+
+		rerankedItems, err := reranker.Rerank(rerankQuery, items, originalTopk)
+
+		if errors.Is(err, pr.ErrRerankerTimeout) {
 			logger.Error(err.Error())
 			rerankedItems = items[:originalTopk]
 		} else if err != nil {
@@ -116,6 +132,7 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 	}
 }
 
+// 그냥 서치
 func (s *SearchServiceServer) Search(ctx context.Context, req *proto.SearchRequest) (*proto.SearchResponse, error) {
 	logger, err := log.GetLogger(ctx)
 	if err != nil {
@@ -332,6 +349,8 @@ func (s *SearchServiceServer) getMultiSearchResults(ctx context.Context, searche
 	return aggregatedItemsList, nil
 }
 
+// 수정
+// 멀티서치
 func (s *SearchServiceServer) MSearch(ctx context.Context, req *proto.MSearchRequest) (*proto.MSearchResponse, error) {
 	logger, err := log.GetLogger(ctx)
 	if err != nil {

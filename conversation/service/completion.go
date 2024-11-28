@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bigkinds.or.kr/conversation/internal/llmclient"
+	"bigkinds.or.kr/pkg/chat/v2/gpt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,13 +19,11 @@ import (
 	"unicode/utf8"
 
 	"bigkinds.or.kr/pkg/chat/v2"
-	"bigkinds.or.kr/pkg/chat/v2/gpt"
 	"bigkinds.or.kr/pkg/utils"
 	"github.com/google/uuid"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
 
-	"bigkinds.or.kr/conversation/internal/llmclient"
 	"bigkinds.or.kr/conversation/internal/token_counter"
 	model "bigkinds.or.kr/conversation/model"
 	"bigkinds.or.kr/conversation/service/function"
@@ -77,22 +77,23 @@ func (s *CompletionService) findLastUserMessage(payloads []*chat.ChatPayload) *c
 	return nil
 }
 
-func setPredictOpts() []func(*gpt.GptPredictionOptions) {
-	predictOpts := make([]func(*gpt.GptPredictionOptions), 0)
-	predictOpts = append(predictOpts, gpt.WithStream)
+// 수정
+func setPredictOpts() []func(*chat.GptPredictionOptions) {
+	predictOpts := make([]func(*chat.GptPredictionOptions), 0)
+	predictOpts = append(predictOpts, chat.WithStream)
 
-	seed, ok := os.LookupEnv("UPSTAGE_OPENAI_SEED")
+	seed, ok := os.LookupEnv("UPSTAGE_LLM_SEED")
 	if ok {
 		seedInt, err := strconv.ParseInt(seed, 10, 64)
 		if err == nil {
-			predictOpts = append(predictOpts, gpt.WithSeed(seedInt))
+			predictOpts = append(predictOpts, chat.WithSeed(seedInt))
 		} else {
 			log.Printf("invalid seed: %s", seed)
 		}
 	}
 
 	var temperature float64 = 0
-	temperatureString, ok := os.LookupEnv("UPSTAGE_OPENAI_TEMPERATURE")
+	temperatureString, ok := os.LookupEnv("UPSTAGE_LLM_TEMPERATURE")
 	if ok {
 		var err error
 		temperature, err = strconv.ParseFloat(temperatureString, 32)
@@ -100,21 +101,27 @@ func setPredictOpts() []func(*gpt.GptPredictionOptions) {
 			log.Printf("invalid temperature from env: %s", temperatureString)
 		}
 	}
-	predictOpts = append(predictOpts, gpt.WithTemperature(float32(temperature)))
+	predictOpts = append(predictOpts, chat.WithTemperature(float32(temperature)))
 	return predictOpts
 }
 
-func getModels() []string {
-	modelList, ok := os.LookupEnv("UPSTAGE_LLM_MODEL")
-	if !ok {
-		modelList = "openai/gpt-3.5-turbo-1106/5"
-	}
-	models := strings.Split(modelList, ",")
-	return models
-}
+// GetModels 수정
+//
+//	func GetModels() []string {
+//		modelList, ok := os.LookupEnv("UPSTAGE_LLM_MODEL")
+//		if !ok {
+//			modelList = "openai/gpt-3.5-turbo-1106/5"
+//		}
+//		models := strings.Split(modelList, ",")
+//		return models
+//	}
+//
 
-func getCompletionLLM(modelIndex int) (*model.CompletionLLM, error) {
-	models := getModels()
+// 수정
+// provider | upstage
+// model | solar-mini
+func GetCompletionLLM(modelIndex int) (*model.CompletionLLM, error) {
+	models := chat.GetModels()
 	if modelIndex >= len(models) {
 		return nil, fmt.Errorf("all fallback failed")
 	}
@@ -138,30 +145,50 @@ func getCompletionLLM(modelIndex int) (*model.CompletionLLM, error) {
 	}, nil
 }
 
+// 수정
 func (s *CompletionService) createInitialPayloads(currentTime utils.CurrentTime, payloads []*chat.ChatPayload) ([]*chat.ChatPayload, error) {
 	currentTime, err := utils.GetCurrentKSTTime()
 	if err != nil {
 		return nil, err
 	}
 	prompt := s.PromptService.GetPrompt(currentTime.Time.Format("2006-01-02T15:04:05-07:00"))
+
+	models := chat.GetModels()
+	provider := models[0]
 	systemPayload := &chat.ChatPayload{
 		Content: prompt,
 		Role:    "system",
 	}
-
+	if provider == "upstage" {
+		systemPayload.Name = new(string)
+		systemPayload.FunctionCall = &chat.ChatFunction{}
+		systemPayload.ToolCalls = make([]*chat.ChatTool, 0)
+	}
 	payloads = append([]*chat.ChatPayload{systemPayload}, payloads...)
 
 	return payloads, nil
 }
 
-func (s *CompletionService) createKeywordsRelatedQueries(ctx context.Context, ch chan *CreateChatCompletionResult, id, provider, modelName, sargs string) {
+// 수정
+func (s *CompletionService) createKeywordsRelatedQueries(context context.Context, ch chan *CreateChatCompletionResult, id, provider, modelName, sargs string) {
 	keywordsRelatedQueriesMode := os.Getenv("KEYWORDS_RELATED_QUERIES_MODE")
 	switch keywordsRelatedQueriesMode {
 	case "llm":
 		keywordsRelatedQueriesService := &KeywordsRelatedQueriesService{
 			tokenCounter: s.tokenCounter,
 		}
-		keywordsRelatedQueries, tokens, err := keywordsRelatedQueriesService.GenerateKeywordsRelatedQueries(ctx, provider, modelName, sargs)
+		var (
+			keywordsRelatedQueries *model.KeywordsRelatedQueries
+			tokens                 int
+			err                    error
+		)
+		switch provider {
+		case "upstage":
+			keywordsRelatedQueries, tokens, err = keywordsRelatedQueriesService.GenerateKeywordsRelatedQueriesSolar(context, modelName, sargs)
+		case "openai":
+			keywordsRelatedQueries, tokens, err = keywordsRelatedQueriesService.GenerateKeywordsRelatedQueriesGpt(context, provider, modelName, sargs)
+		}
+
 		if err != nil {
 			slog.Error("error getting keywords related queries", "error", err.Error())
 			keywordsRelatedQueries = &model.KeywordsRelatedQueries{
@@ -262,10 +289,11 @@ func convertArgumentsToUTF8IfNot(sargs string, newStandaloneQuery string) (strin
 	}
 }
 
-func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+func (s *CompletionService) CreateChatCompletion(context context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
 	payloads := param.Payloads
 
 	completionId := uuid.New().String()
+	// 수정 predict 옵션
 	predictOpts := setPredictOpts()
 	articleProvider := param.Provider
 
@@ -281,26 +309,26 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 	}
 
 	functions := s.FunctionService.ListFunctions(currentTime)
+
 	if len(functions) > 0 {
 		functionRawJson := make([]string, 0, len(functions))
-		for _, function := range functions {
-			definition := function.Definition()
-			b, err := json.Marshal(definition)
+		for _, gptFunction := range functions {
+			definition := gptFunction.Definition()
+			marshal, err := json.Marshal(definition)
 			if err != nil {
 				return nil, err
 			}
-			functionRawJson = append(functionRawJson, string(b))
+			functionRawJson = append(functionRawJson, string(marshal))
 		}
-		predictOpts = append(predictOpts, gpt.WithFunctions(functionRawJson))
+		predictOpts = append(predictOpts, chat.WithFunctions(functionRawJson))
 	}
-
-	ch := make(chan *CreateChatCompletionResult, 10)
+	completionResultChannel := make(chan *CreateChatCompletionResult, 10)
 
 	modelIndex := 0
 	keyIndex := 0
 	var completionLLM *model.CompletionLLM
 	go func() {
-		defer close(ch)
+		defer close(completionResultChannel)
 
 		fallbackCount := 0
 
@@ -311,9 +339,9 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 		for {
 			fallbackCount++
 
-			if loopError == function.ErrSearchFunctionFailed {
+			if errors.Is(loopError, function.ErrSearchFunctionFailed) {
 				slog.Error("search function failed")
-				ch <- &CreateChatCompletionResult{
+				completionResultChannel <- &CreateChatCompletionResult{
 					Error: loopError,
 				}
 				return
@@ -329,9 +357,9 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 			}
 			loopError = nil
 
-			completionLLM, err = getCompletionLLM(modelIndex)
+			completionLLM, err = GetCompletionLLM(modelIndex)
 			if err != nil {
-				ch <- &CreateChatCompletionResult{
+				completionResultChannel <- &CreateChatCompletionResult{
 					Error: err,
 				}
 				return
@@ -346,14 +374,15 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 
 			slog.Info("try to create response", "provider", completionLLM.Provider, "model", completionLLM.ModelName, "maxFallbackCount", completionLLM.MaxFallbackCount, "fallbackCount", fallbackCount)
 
-			predictOpts = append(predictOpts, gpt.WithModel(completionLLM.ModelName))
+			predictOpts = append(predictOpts, chat.WithModel(completionLLM.ModelName))
 
+			// 클라이언트 수정
 			client, err := llmclient.NewClient(
 				s.client,
 				completionLLM.Provider,
 				completionLLM.ModelName,
 				keyIndex,
-				gpt.WithStreamEnabled,
+				chat.WithStreamEnabled,
 			)
 
 			if err != nil {
@@ -367,22 +396,28 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 
 			sendKeywordsRelatedQueries := false
 			for {
-				stream, err := client.CreateChatStream(ctx, payloads, predictOpts...)
+				// 수정시 볼 곳
+				stream, err := client.CreateChatStream(context, completionLLM.Provider, payloads, predictOpts...)
 				if err != nil {
 					loopError = err
 					break
 				}
-				defer stream.Close()
+				defer func(stream gpt.ChatStream) {
+					err := stream.Close()
+					if err != nil {
+						slog.Error("failed to close stream", "error", err)
+					}
+				}(stream)
 
 				// count input tokens
 				tokenCount := 0
 				for _, payload := range payloads {
 					tokenCount += s.tokenCounter.CountTokens(payload.Content)
 				}
-				for _, function := range functions {
-					tokenCount += s.tokenCounter.CountFunctionInputTokens(function.Definition())
+				for _, gptFunction := range functions {
+					tokenCount += s.tokenCounter.CountFunctionInputTokens(gptFunction.Definition())
 				}
-				ch <- &CreateChatCompletionResult{
+				completionResultChannel <- &CreateChatCompletionResult{
 					Completion: &model.Completion{
 						Object:     "chat.completion",
 						Id:         completionId,
@@ -397,15 +432,14 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 					if done {
 						break
 					}
-
 					select {
-					case <-ctx.Done():
-						ch <- &CreateChatCompletionResult{
-							Error: ctx.Err(),
+					case <-context.Done():
+						completionResultChannel <- &CreateChatCompletionResult{
+							Error: context.Err(),
 						}
 						return
 					default:
-						resp, err := stream.Recv()
+						resp, err := stream.Recv(completionLLM.Provider)
 						if err != nil && err != io.EOF {
 							loopError = err
 							break
@@ -415,7 +449,8 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 							break
 						}
 
-						if resp.FunctionCall == nil {
+						if (completionLLM.Provider == "upstage" && resp.ToolCalls == nil) ||
+							(completionLLM.Provider == "openai" && resp.FunctionCall == nil) {
 							completion := &model.Completion{
 								Object:  "chat.completion",
 								Id:      completionId,
@@ -426,10 +461,9 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 								TokenUsage: s.tokenCounter.CountTokens(resp.Payload.Content),
 							}
 
-							ch <- &CreateChatCompletionResult{
+							completionResultChannel <- &CreateChatCompletionResult{
 								Completion: completion,
 							}
-
 						}
 					}
 				}
@@ -437,15 +471,21 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 				if loopError != nil {
 					break
 				}
-				resp := stream.ReadUntilNow()
-
-				if len(resp.Choices) == 0 {
+				response := stream.ReadUntilNow()
+				if len(response.Choices) == 0 {
 					loopError = fmt.Errorf("no choices")
 					break
-				} else if resp.Choices[0].FinishReason == "function_call" {
-					f := resp.Choices[0].Message.FunctionCall
-					tokenCount := s.tokenCounter.CountFunctionOutputTokens(f.Arguments)
-					ch <- &CreateChatCompletionResult{
+				} else if response.Choices[0].FinishReason == "function_call" || response.Choices[0].FinishReason == "tool_calls" {
+					callResponse := &gpt.ChatCompletionFunctionCallResp{}
+					if response.Choices[0].FinishReason == "function_call" {
+						callResponse.Name = response.Choices[0].Message.FunctionCall.Name
+						callResponse.Arguments = response.Choices[0].Message.FunctionCall.Arguments
+					} else {
+						callResponse.Name = response.Choices[0].Message.ToolCalls[0].Function.Name
+						callResponse.Arguments = response.Choices[0].Message.ToolCalls[0].Function.Arguments
+					}
+					tokenCount := s.tokenCounter.CountFunctionOutputTokens(callResponse.Arguments)
+					completionResultChannel <- &CreateChatCompletionResult{
 						Completion: &model.Completion{
 							Object:     "chat.completion",
 							Id:         completionId,
@@ -453,15 +493,14 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 							TokenUsage: tokenCount,
 						},
 					}
-
-					slog.Info("try to call function", "name", resp.Choices[0].Message.FunctionCall.Name, "arguments", resp.Choices[0].Message.FunctionCall.Arguments, "count", maxFunctionLoop)
+					slog.Info("try to call tools ", "name", callResponse.Name, "arguments", callResponse.Arguments, "count", maxFunctionLoop)
 					lastUserMessage := s.findLastUserMessage(payloads)
 					if lastUserMessage == nil {
 						loopError = fmt.Errorf("there is no user message")
 						break
 					}
 
-					f.Arguments, err = convertArgumentsToUTF8IfNot(f.Arguments, lastUserMessage.Content)
+					callResponse.Arguments, err = convertArgumentsToUTF8IfNot(callResponse.Arguments, lastUserMessage.Content)
 					if err != nil {
 						loopError = err
 						break
@@ -470,55 +509,36 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						RawQuery: lastUserMessage.Content,
 						Provider: articleProvider,
 					}
-					b, err := s.FunctionService.CallFunction(ctx, f.Name, f.Arguments, functions, extraArgs)
-					if err != nil {
-						if err == function.IndependentCallError {
-							// set payloads
-							if payloads[0].Role == "system" {
-								payloads = payloads[1:]
-							} else {
-								loopError = errors.New("first payload should be system")
-								break
-							}
-							predictOpts = append(predictOpts, gpt.WithFunctions([]string{}))
-							continue
-						} else {
-							if maxFunctionLoop < 3 {
-								maxFunctionLoop++
-								continue
-							}
-							loopError = err
-							break
-						}
-					}
+					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
 
-					// use go routine to call keywords related queries
 					slog.Info("try to generate keywords and relatedQueries", "provider", completionLLM.Provider, "model", completionLLM.ModelName)
-					if f.Name == "search" && len(f.Arguments) > 0 && !sendKeywordsRelatedQueries {
+
+					// 수정 query 가져오기
+					if callResponse.Name == "search" && len(callResponse.Arguments) > 0 && !sendKeywordsRelatedQueries {
 						keywordsRelatedQueriesWg.Add(1)
 						sendKeywordsRelatedQueries = true
 						go func() {
 							defer keywordsRelatedQueriesWg.Done()
-							s.createKeywordsRelatedQueries(ctx, ch, completionId, completionLLM.Provider, completionLLM.ModelName, f.Arguments)
+							// 수정
+							s.createKeywordsRelatedQueries(context, completionResultChannel, completionId, completionLLM.Provider, completionLLM.ModelName, callResponse.Arguments)
 						}()
 					}
 
 					functionCallMsg := &chat.ChatPayload{
 						Role: "assistant",
 						FunctionCall: &chat.ChatFunction{
-							Name:      f.Name,
-							Arguments: f.Arguments,
+							Name:      callResponse.Name,
+							Arguments: callResponse.Arguments,
 						},
 					}
-
+					payloadContent := string(callFunctionResponse)
 					// send result
-					payloadContent := string(b)
-					switch f.Name {
+					switch callResponse.Name {
 					case "search":
 						var items struct {
 							Items []model.Reference `json:"items"`
 						}
-						err = json.Unmarshal(b, &items)
+						err = json.Unmarshal(callFunctionResponse, &items)
 						if err != nil {
 							fmt.Printf("error unmarshalling references: %s\n", err.Error())
 							break
@@ -530,7 +550,7 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 							contentRemovedReference[i].Attributes.Content = ""
 						}
 
-						ch <- &CreateChatCompletionResult{ // should not be accumulated
+						completionResultChannel <- &CreateChatCompletionResult{ // should not be accumulated
 							Completion: &model.Completion{
 								Object:  "chat.completion",
 								Id:      completionId,
@@ -569,19 +589,27 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 
 						// remove past search payloads
 						for i := 0; i < len(payloads); i++ {
-							if payloads[i].Role == "function" && *payloads[i].Name == "search" {
+							if payloads[i].Name == nil {
+								continue
+							}
+							if (payloads[i].Role == "function" && *payloads[i].Name == "search") || (payloads[i].Role == "assistant" && *payloads[i].Name == "search") {
 								payloads = append(payloads[:i], payloads[i+1:]...)
 								i--
 							}
 						}
-
 						payloadContent = string(rawRefsWithItemsIdCleared)
 					}
-
+					role := ""
+					switch completionLLM.Provider {
+					case "openai":
+						role = "function"
+					case "upstage":
+						role = "assistant"
+					}
 					payloads = append(payloads, functionCallMsg, &chat.ChatPayload{
 						Content: payloadContent,
-						Role:    "function",
-						Name:    &f.Name,
+						Role:    role,
+						Name:    &callResponse.Name,
 					})
 					if payloads[0].Role == "system" {
 						payloads[0] = &chat.ChatPayload{
@@ -593,9 +621,8 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						break
 					}
 				} else {
-					// wait for keywords and relatedQueries before done
 					keywordsRelatedQueriesWg.Wait()
-					ch <- &CreateChatCompletionResult{
+					completionResultChannel <- &CreateChatCompletionResult{
 						Done: true,
 					}
 					return
@@ -604,5 +631,5 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 		}
 	}()
 
-	return ch, nil
+	return completionResultChannel, nil
 }

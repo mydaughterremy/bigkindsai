@@ -12,6 +12,7 @@ type ChatCompletionOptions struct {
 	options azopenai.ChatCompletionsOptions
 }
 
+// 수정 provider 에 따라 키워드 추출
 func NewLLMClient(provider string, modelName string) (*azopenai.Client, error) {
 	switch provider {
 	case "openai":

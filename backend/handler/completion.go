@@ -23,92 +23,92 @@ type CreateChatCompletionRequest struct {
 	Provider string `json:"provider"`
 }
 
-func (h *completionHandler) CreateChatCompletion(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h *completionHandler) CreateChatCompletion(responseWriter http.ResponseWriter, request *http.Request) {
+	context := request.Context()
 
-	var req CreateChatCompletionRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	var completionRequest CreateChatCompletionRequest
+	err := json.NewDecoder(request.Body).Decode(&completionRequest)
 
 	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 		return
 	}
 
-	chatId := chi.URLParam(r, "chat_id")
+	chatId := chi.URLParam(request, "chat_id")
 
-	var ch chan *service.CreateChatCompletionResult
+	var chatChannel chan *service.CreateChatCompletionResult
 	useMultiTurn, ok := os.LookupEnv("USE_MULTI_TURN")
 	if ok && useMultiTurn == "true" {
-		ch, err = h.service.CreateChatCompletionWithChatHistory(ctx,
+		chatChannel, err = h.service.CreateChatCompletionWithChatHistory(context,
 			&service.CreateChatCompletionParameter{
 				ChatID:   chatId,
-				Session:  req.Session,
-				JobGroup: req.JobGroup,
+				Session:  completionRequest.Session,
+				JobGroup: completionRequest.JobGroup,
 				Messages: []*model.Message{
 					{
-						Content: req.Message,
 						Role:    "user",
+						Content: completionRequest.Message,
 					},
 				},
-				Provider: req.Provider,
+				Provider: completionRequest.Provider,
 			})
 		if err != nil {
-			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusInternalServerError, err)
 			return
 		}
 	} else {
-		ch, err = h.service.CreateChatCompletion(ctx,
+		chatChannel, err = h.service.CreateChatCompletion(context,
 			&service.CreateChatCompletionParameter{
 				ChatID:   chatId,
-				Session:  req.Session,
-				JobGroup: req.JobGroup,
+				Session:  completionRequest.Session,
+				JobGroup: completionRequest.JobGroup,
 				Messages: []*model.Message{
 					{
-						Content: req.Message,
 						Role:    "user",
+						Content: completionRequest.Message,
 					},
 				},
-				Provider: req.Provider,
+				Provider: completionRequest.Provider,
 			})
 		if err != nil {
-			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusInternalServerError, err)
 			return
 		}
 	}
 
-	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+	responseWriter.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
 	go func() {
-		defer wg.Done()
+		defer waitGroup.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-context.Done():
 				return
-			case result, ok := <-ch:
+			case result, ok := <-chatChannel:
 				if !ok {
 					return
 				}
 				if result.Error != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, result.Error)
+					responseWriter.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(responseWriter, result.Error)
 					return
 				} else if result.Done {
-					_ = response.WriteStreamResponse(w, []byte("[DONE]"))
+					_ = response.WriteStreamResponse(responseWriter, []byte("[DONE]"))
 					return
 				}
 
-				b, err := json.Marshal(result.Completion)
+				body, err := json.Marshal(result.Completion)
 				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, err)
+					responseWriter.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(responseWriter, err)
 					return
 				}
-				_ = response.WriteStreamResponse(w, b)
+				_ = response.WriteStreamResponse(responseWriter, body)
 			}
 		}
 	}()
 
-	wg.Wait()
+	waitGroup.Wait()
 }

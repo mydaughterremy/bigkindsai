@@ -82,8 +82,6 @@ func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Cont
 
 	messages := make([]*model.Message, 0)
 
-	referenceUsed := false
-
 	for i := len(qas) - 1; i >= 0; i-- {
 		// start iteration from latest to use only latest reference
 
@@ -101,7 +99,7 @@ func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Cont
 			Role:    "assistant",
 		})
 
-		if qa.References != nil && !referenceUsed {
+		if qa.References != nil {
 			b, err := json.Marshal(qa.References)
 			if err != nil {
 				return nil, err
@@ -118,8 +116,8 @@ func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Cont
 		}
 
 		messages = append(messages, &model.Message{
-			Content: qa.Question,
 			Role:    "user",
+			Content: qa.Question,
 		})
 	}
 
@@ -139,7 +137,7 @@ func (s *CompletionService) findLastUserMessage(messages []*model.Message) *mode
 	return nil
 }
 
-func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+func (s *CompletionService) CreateChatCompletion(context context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
 	messages := param.Messages
 
 	qaId := uuid.New().String()
@@ -172,18 +170,18 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 			},
 		},
 	}
-	err := s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
+	err := s.EventLogService.WriteEvent(context, questionCreatedEvent)
 	if err != nil {
 		return nil, err
 	}
 
-	ch := make(chan *CreateChatCompletionResult, 10)
+	completionChannel := make(chan *CreateChatCompletionResult, 10)
 
 	go func() {
-		defer close(ch)
+		defer close(completionChannel)
 
 		if sessionId == "stream-error-test" {
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Error: fmt.Errorf("stream error test"),
 			}
 			return
@@ -191,7 +189,7 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 
 		lastUserPayloads := messages[len(messages)-1]
 		if lastUserPayloads.Role != "user" {
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Error: fmt.Errorf("last payload role should be user"),
 			}
 			return
@@ -205,30 +203,30 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 					Content: "더 구체적인 질문을 해 주세요",
 				},
 			}
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Completion: completion,
 			}
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Done: true,
 			}
 			return
 		}
 		tokenCount := 0
 
-		req := model.CreateChatCompletionRequest{
+		completionRequest := model.CreateChatCompletionRequest{
 			Messages: messages,
 			Provider: articleProvider,
 		}
-		b, err := json.Marshal(req)
+		requestBody, err := json.Marshal(completionRequest)
 		if err != nil {
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Error: err,
 			}
 			return
 		}
-		stream, err := request.CreateChatStream(ctx, s.client, s.convEngineEndpoint, b)
+		stream, err := request.CreateChatStream(context, s.client, s.convEngineEndpoint, requestBody)
 		if err != nil {
-			ch <- &CreateChatCompletionResult{
+			completionChannel <- &CreateChatCompletionResult{
 				Error: err,
 			}
 			return
@@ -237,15 +235,15 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 
 		for {
 			select {
-			case <-ctx.Done():
-				ch <- &CreateChatCompletionResult{
-					Error: ctx.Err(),
+			case <-context.Done():
+				completionChannel <- &CreateChatCompletionResult{
+					Error: context.Err(),
 				}
 				return
 			default:
 				resp, err := stream.Recv()
 				if err != nil && err != io.EOF {
-					ch <- &CreateChatCompletionResult{
+					completionChannel <- &CreateChatCompletionResult{
 						Error: err,
 					}
 
@@ -262,13 +260,13 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 					Delta:   resp.Delta,
 				}
 
-				ch <- &CreateChatCompletionResult{
+				completionChannel <- &CreateChatCompletionResult{
 					Completion: completion,
 				}
 
 				// count token
 				tokenCount += resp.TokenUsage
-				_ = s.EventLogService.WriteEvent(ctx, &pb.Event{
+				_ = s.EventLogService.WriteEvent(context, &pb.Event{
 					QaId: qaId,
 					Event: &pb.Event_TokenCountUpdated{
 						TokenCountUpdated: &pb.TokenCountUpdated{
@@ -287,11 +285,12 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						Event: &pb.Event_AnswerUpdated{
 							AnswerUpdated: &pb.AnswerUpdated{
 								Answer: merged.Delta.Content,
+								// llm model, llm provider 없는데 ?
 							},
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
-					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
+					_ = s.EventLogService.WriteEvent(context, answerUpdatedEvent)
 				}
 
 				if len(merged.Delta.References) > 0 {
@@ -304,7 +303,7 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
-					_ = s.EventLogService.WriteEvent(ctx, referencesCreatedEvent)
+					_ = s.EventLogService.WriteEvent(context, referencesCreatedEvent)
 				}
 
 				if len(merged.Delta.Keywords) > 0 {
@@ -317,7 +316,7 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
-					_ = s.EventLogService.WriteEvent(ctx, keywordsCreatedEvent)
+					_ = s.EventLogService.WriteEvent(context, keywordsCreatedEvent)
 				}
 
 				if len(merged.Delta.RelatedQueries) > 0 {
@@ -330,12 +329,12 @@ func (s *CompletionService) CreateChatCompletion(ctx context.Context, param *Cre
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
-					_ = s.EventLogService.WriteEvent(ctx, relatedQueriesCreatedEvent)
+					_ = s.EventLogService.WriteEvent(context, relatedQueriesCreatedEvent)
 				}
 			}
 		}
 
 	}()
 
-	return ch, nil
+	return completionChannel, nil
 }

@@ -22,15 +22,15 @@ type SSEStream struct {
 }
 
 func CreateChatStream(ctx context.Context, client *http.Client, host string, body []byte) (*SSEStream, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", host, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, "POST", host, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "text/event-stream")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
