@@ -61,7 +61,10 @@ type ChatCompletionResponseUsage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
-
+type ChatCompletionSummaryResp struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
 type ChatCompletionFunctionCallResp struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"` // ChatCompletionFunctionCallParams
