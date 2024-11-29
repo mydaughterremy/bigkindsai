@@ -23,7 +23,7 @@ type ExtraArgs struct {
 type FunctionService struct {
 }
 
-func parseFunctionArguments(sargs string) (map[string]interface{}, error) {
+func ParseFunctionArguments(sargs string) (map[string]interface{}, error) {
 	var margs map[string]interface{}
 	err := json.Unmarshal([]byte(sargs), &margs)
 
@@ -34,7 +34,7 @@ func (s *FunctionService) CallFunction(ctx context.Context, name string, sargs s
 	for _, function := range functions {
 		def := function.Definition()
 		if def.Name == name {
-			margs, err := parseFunctionArguments(sargs)
+			margs, err := ParseFunctionArguments(sargs)
 			if err != nil {
 				return nil, err
 			}
@@ -47,7 +47,7 @@ func (s *FunctionService) CallFunction(ctx context.Context, name string, sargs s
 func (s *FunctionService) ListFunctions(currentTime utils.CurrentTime) []GPTFunction {
 	return []GPTFunction{
 		&SearchPlugin{
-			currentTime: currentTime,
+			CurrentTime: currentTime,
 		},
 		&TranslatePlugin{},
 		&SummarizePlugin{},

@@ -203,7 +203,7 @@ func WithSeed(seed int64) func(*GptPredictionOptions) {
 
 func solarModels() []string {
 	return []string{
-		"solar",
+		"solar-mini",
 	}
 }
 
