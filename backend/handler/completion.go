@@ -23,6 +23,78 @@ type CreateChatCompletionRequest struct {
 	Provider string `json:"provider"`
 }
 
+type DevCreateChatCompletionMulti struct {
+	ChatId string `json:"chat_id"`
+}
+
+func (h *completionHandler) CreateChatCompletionMulti(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req CreateChatCompletionRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+
+	chatId := chi.URLParam(r, "chat_id")
+
+	var chatChannel chan *service.CreateChatCompletionResult
+	chatChannel, err = h.service.CreateChatCompletionMulti(ctx,
+		&service.CreateChatCompletionParameter{
+			ChatID:   chatId,
+			Session:  req.Session,
+			JobGroup: req.JobGroup,
+			Messages: []*model.Message{
+				{
+					Role:    "user",
+					Content: req.Message,
+				},
+			},
+			Provider: req.Provider,
+		})
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case result, ok := <-chatChannel:
+				if !ok {
+					return
+				}
+				if result.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, result.Error)
+					return
+				} else if result.Done {
+					_ = response.WriteStreamResponse(w, []byte("[DONE]"))
+					return
+				}
+
+				body, err := json.Marshal(result.Completion)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, err)
+					return
+				}
+				_ = response.WriteStreamResponse(w, body)
+			}
+		}
+	}()
+
+	waitGroup.Wait()
+}
+
 func (h *completionHandler) CreateChatCompletion(responseWriter http.ResponseWriter, request *http.Request) {
 	context := request.Context()
 

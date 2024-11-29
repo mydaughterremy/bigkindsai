@@ -77,3 +77,11 @@ func (s *ChatService) ListChatQAs(ctx context.Context, session, chatID string) (
 	}
 	return qas, nil
 }
+
+func (s *ChatService) LastChatQA(ctx context.Context, chatID string) (*model.QA, error) {
+	qa, err := s.QARepository.LastChatQA(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	return qa, nil
+}

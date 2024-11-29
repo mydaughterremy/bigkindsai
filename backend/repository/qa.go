@@ -68,6 +68,16 @@ func (s *QARepository) ListChatQAs(ctx context.Context, session, chatID string) 
 	return qas, nil
 }
 
+func (s *QARepository) LastChatQA(ctx context.Context, chatID string) (*model.QA, error) {
+	var qa *model.QA
+	if err := s.DB.WithContext(ctx).Where("chad_id = ? AND answer != '' AND question != ''", chatID).Order("create_at").Limit(1).Find(&qa).Error; err != nil {
+		return nil, err
+	}
+
+	return qa, nil
+
+}
+
 func (s *QARepository) ListQAsWithPagination(ctx context.Context, from time.Time, to time.Time, searchQuery string, offset int, limit int) ([]*model.QA, error) {
 	var qas []*model.QA
 	tx := s.DB.WithContext(ctx)

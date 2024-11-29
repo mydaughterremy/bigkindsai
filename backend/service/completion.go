@@ -70,6 +70,46 @@ func NewCompletionService(
 	return service, nil
 }
 
+func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
+	qa, err := s.ChatService.LastChatQA(timeoutctx, param.ChatID)
+	if err != nil {
+		slog.Error("error getting chat qa", "error", err.Error())
+	}
+
+	messages := make([]*model.Message, 0)
+	messages = append(messages, &model.Message{
+		Content: qa.Answer,
+		Role:    "assistant",
+	})
+
+	if qa.References != nil {
+		b, err := json.Marshal(qa.References)
+		if err != nil {
+			return nil, err
+		}
+
+		functionName := "search"
+
+		messages = append(messages, &model.Message{
+			Content: string(b),
+			Role:    "function",
+			Name:    functionName,
+		})
+	}
+
+	messages = append(messages, &model.Message{
+		Role:    "user",
+		Content: qa.Question,
+	})
+
+	param.Messages = append(messages, param.Messages...)
+
+	return s.CreateChatCompletion(ctx, param)
+}
+
 func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
 	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()

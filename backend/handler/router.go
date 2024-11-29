@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"github.com/go-chi/chi/v5"
-	"github.com/segmentio/kafka-go"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/segmentio/kafka-go"
 
 	"gorm.io/gorm"
 
@@ -117,6 +118,13 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 					router.Delete("/", qaHandler.DeleteVote)
 				})
 			})
+		})
+	})
+
+	router.Route("/dev", func(router chi.Router) {
+		router.Route("/chats", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Post("/{chat_id}/completions/multi", completionHandler.CreateChatCompletionMulti)
 		})
 	})
 
