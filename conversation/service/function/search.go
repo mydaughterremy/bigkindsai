@@ -19,7 +19,7 @@ import (
 var ErrSearchFunctionFailed = errors.New("search function failed")
 
 type SearchPlugin struct {
-	currentTime utils.CurrentTime
+	CurrentTime utils.CurrentTime
 }
 
 func mergeChunks(chunks []*model.Reference) []*model.Reference {
@@ -89,7 +89,7 @@ func (s *SearchPlugin) hasFutureDate(dateRange *model.PublishedDateRange) (bool,
 			slog.Info("The date in `published_date_range` start date is invalid")
 			return false, err
 		}
-		return startTime.After(s.currentTime.Time), nil
+		return startTime.After(s.CurrentTime.Time), nil
 	}
 	return false, nil
 }
@@ -306,10 +306,10 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 }
 
 func (s *SearchPlugin) Definition() model.Function {
-	firstExampleStartTime := time.Date(s.currentTime.Time.Year(), s.currentTime.Time.Month(), s.currentTime.Time.Day(), 0, 0, 0, 0, s.currentTime.Location).AddDate(0, 0, -30).Format("2006-01-02T15:04:05-07:00")
-	firstExampleEndTime := time.Date(s.currentTime.Time.Year(), s.currentTime.Time.Month(), s.currentTime.Time.Day(), 23, 59, 59, 999999, s.currentTime.Location).Format("2006-01-02T15:04:05-07:00")
-	secondExampleStartTime := time.Date(2011, 1, 1, 0, 0, 0, 0, s.currentTime.Location).Format("2006-01-02T15:04:05-07:00")
-	secondExampleEndTime := time.Date(2016, 12, 31, 23, 59, 59, 999999, s.currentTime.Location).Format("2006-01-02T15:04:05-07:00")
+	firstExampleStartTime := time.Date(s.CurrentTime.Time.Year(), s.CurrentTime.Time.Month(), s.CurrentTime.Time.Day(), 0, 0, 0, 0, s.CurrentTime.Location).AddDate(0, 0, -30).Format("2006-01-02T15:04:05-07:00")
+	firstExampleEndTime := time.Date(s.CurrentTime.Time.Year(), s.CurrentTime.Time.Month(), s.CurrentTime.Time.Day(), 23, 59, 59, 999999, s.CurrentTime.Location).Format("2006-01-02T15:04:05-07:00")
+	secondExampleStartTime := time.Date(2011, 1, 1, 0, 0, 0, 0, s.CurrentTime.Location).Format("2006-01-02T15:04:05-07:00")
+	secondExampleEndTime := time.Date(2016, 12, 31, 23, 59, 59, 999999, s.CurrentTime.Location).Format("2006-01-02T15:04:05-07:00")
 	return model.Function{
 		Name: "search",
 		Description: fmt.Sprintf(`Use this function to get external knowledge to answer information questions. e.g. "~가 누구야?", "~가 뭐야?", "~에 대해 알려줘", "~는 무엇인가요?".

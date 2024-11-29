@@ -320,7 +320,6 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 	}
 
 	queryBytes, err := json.Marshal(solarQuery)
-
 	if err != nil {
 		logrus.Errorf("error marshalling gpt query: %s", err)
 		return nil, err

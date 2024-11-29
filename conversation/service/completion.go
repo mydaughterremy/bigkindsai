@@ -151,7 +151,7 @@ func (s *CompletionService) createInitialPayloads(currentTime utils.CurrentTime,
 	if err != nil {
 		return nil, err
 	}
-	prompt := s.PromptService.GetPrompt(currentTime.Time.Format("2006-01-02T15:04:05-07:00"))
+	prompt := s.PromptService.GetChatPrompt(currentTime.Time.Format("2006-01-02T15:04:05-07:00"))
 
 	models := chat.GetModels()
 	provider := models[0]

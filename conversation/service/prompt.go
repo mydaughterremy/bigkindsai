@@ -8,7 +8,7 @@ type PromptService struct {
 }
 
 // 수정
-func (s *PromptService) GetPrompt(currentTime string) string {
+func (s *PromptService) GetChatPrompt(currentTime string) string {
 	return fmt.Sprintf(`|Execution background|
 		Current time is %s.
 

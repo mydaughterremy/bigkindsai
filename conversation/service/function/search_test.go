@@ -13,7 +13,7 @@ import (
 func getMockSearchPlugin() *SearchPlugin {
 	mockTime, _ := time.Parse(time.RFC3339, "2023-05-11T12:00:00.000+09:00")
 	return &SearchPlugin{
-		currentTime: utils.CurrentTime{
+		CurrentTime: utils.CurrentTime{
 			Time: mockTime,
 		},
 	}
