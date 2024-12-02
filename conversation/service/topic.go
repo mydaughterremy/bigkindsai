@@ -23,8 +23,11 @@ type TopicService struct {
 }
 
 type FindTopicResponse struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
+	Title   string `json:"topic_title"`
+	Content string `json:"topic_content"`
+	Count int `json:"news_count"`
+	Ids []string `json:"news_ids"`
+
 }
 
 func NewTopicService() *TopicService {
@@ -62,7 +65,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	}
 	response, err := client.CreateChat(context, models[0], messages, chat.WithModel(models[1]))
 	if err != nil {
-		slog.Error("error : ", err)
+		slog.Error("create keyword chat","error", err)
 		return nil, err
 	}
 	callResponse, err := parsingKeywordResponse(response)
@@ -80,6 +83,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	}
 	extraArgs := &function.ExtraArgs{
 		RawQuery: topicMessage,
+		Topk: 100,
 	}
 
 	searchByte, err := topicService.search.Call(context, arguments, extraArgs)
@@ -93,8 +97,12 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		return nil, err
 	}
 	var contents string
-	for _, item := range items.Items {
-		contents += item.Attributes.Content
+	var news_ids []string
+	for i, item := range items.Items {
+		news_ids = append(news_ids, item.Attributes.NewsID)
+		if i < 5{
+			contents += item.Attributes.Content
+		}
 	}
 
 	summaryMessage := make([]*chat.ChatPayload, 1)
@@ -104,7 +112,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	}
 	summaryResponse, err := client.CreateChat(context, models[0], summaryMessage, chat.WithModel(models[1]))
 	if err != nil {
-		slog.Error("error : ", err)
+		slog.Error("create summary chat ","error", err)
 		return nil, err
 	}
 	summaryCallResponse, err := parsingSummaryResponse(summaryResponse)
@@ -114,6 +122,8 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	findTopicResponse := &FindTopicResponse{
 		Title:   summaryCallResponse.Title,
 		Content: summaryCallResponse.Content,
+		Count:  len(items.Items),
+		Ids: news_ids,
 	}
 	return findTopicResponse, nil
 }

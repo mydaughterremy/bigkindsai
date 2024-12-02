@@ -1,11 +1,12 @@
 package function
 
 import (
-	"bigkinds.or.kr/conversation/model"
-	"bigkinds.or.kr/pkg/utils"
 	"context"
 	"encoding/json"
 	"errors"
+
+	"bigkinds.or.kr/conversation/model"
+	"bigkinds.or.kr/pkg/utils"
 )
 
 var IndependentCallError = errors.New("this function should be called independently not as a part of a pipeline")
@@ -18,6 +19,7 @@ type GPTFunction interface {
 type ExtraArgs struct {
 	RawQuery string `json:"raw_query"`
 	Provider string `json:"provider"`
+	Topk int `json:"top_k"`
 }
 
 type FunctionService struct {

@@ -202,7 +202,7 @@ func (s *SearchPlugin) handleDateRangeSpecified(rawQuery, standaloneQuery string
 
 func (s *SearchPlugin) createSearchRequests(arguments map[string]interface{}, extraArgs *ExtraArgs) (*model.MSearchBody, error) {
 	var body *model.MSearchBody
-	const topK = 15
+	topK := extraArgs.Topk
 	standaloneQuery, ok := arguments["standalone_query"].(string)
 	rawQuery := extraArgs.RawQuery
 	if !ok {
