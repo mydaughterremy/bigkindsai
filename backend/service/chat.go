@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +23,51 @@ func (s *ChatService) GetChat(ctx context.Context, id uuid.UUID) (*model.Chat, e
 		return nil, err
 	}
 	return chat, nil
+}
+
+func (s *ChatService) ChatLogin(ctx context.Context, chatId string, user string) ([]*model.ChatQA, error) {
+	uh := getUserHash(user)
+	id, err := uuid.Parse(chatId)
+	if err != nil {
+		return nil, err
+	}
+
+	// update user_hash by chatId
+	c, err := s.ChatRepository.UpdateChatUser(ctx, &model.Chat{
+		ID:       id,
+		UserHash: uh,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get list of chat by user_hash
+	chats, err := s.ChatRepository.ListChatsUser(ctx, c.UserHash)
+	if err != nil {
+		return nil, err
+	}
+
+	chatqas := make([]*model.ChatQA, 0)
+
+	for _, chat := range chats {
+		qas, err := s.QARepository.ListChatIdQAs(ctx, chat.ID.String())
+		if err != nil {
+			return nil, err
+		}
+		chatqas = append(chatqas, &model.ChatQA{
+			ID:       chat.ID,
+			CreateAt: chat.CreatedAt,
+			Title:    chat.Title,
+			QAs:      qas,
+		})
+	}
+
+	return chatqas, nil
+}
+
+func getUserHash(user string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(user)))
 }
 
 func (s *ChatService) CreateChat(ctx context.Context, sessionId string) (*model.Chat, error) {

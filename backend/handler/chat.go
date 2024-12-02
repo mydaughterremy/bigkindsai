@@ -22,6 +22,28 @@ type CreateChatRequest struct {
 	Session string `json:"session"`
 }
 
+type LoginChatRequest struct {
+	ChatId string `json:"chat_id"`
+	User   string `json:"user"`
+}
+
+func (h *ChatHandler) Login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := LoginChatRequest{}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+	}
+
+	chatqas, err := h.ChatService.ChatLogin(ctx, req.ChatId, req.User)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, chatqas)
+
+}
+
 func (h *ChatHandler) GetChat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	chatId := chi.URLParam(r, "chat_id")

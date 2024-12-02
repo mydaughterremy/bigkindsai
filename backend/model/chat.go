@@ -15,4 +15,12 @@ type Chat struct {
 	Object    string         `gorm:"-all"`
 	Title     string
 	SessionID string `json:"session_id" gorm:"index"`
+	UserHash  string `gorm:"index"`
+}
+
+type ChatQA struct {
+	ID       uuid.UUID
+	CreateAt time.Time
+	Title    string
+	QAs      []*QA
 }
