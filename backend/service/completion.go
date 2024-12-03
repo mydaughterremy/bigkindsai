@@ -56,7 +56,7 @@ func NewCompletionService(
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: 20 * time.Second,
 		},
 	}
 
