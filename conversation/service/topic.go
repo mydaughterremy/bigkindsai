@@ -92,6 +92,8 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	extraArgs := &function.ExtraArgs{
 		RawQuery: topicMessage,
 		Topk: 300,
+		MaxChunkSize: 60000,
+		MaxChunkNumber: 300,
 	}
 
 	searchByte, err := topicService.search.Call(context, arguments, extraArgs)

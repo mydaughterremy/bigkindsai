@@ -510,6 +510,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 						RawQuery: lastUserMessage.Content,
 						Provider: articleProvider,
 						Topk: 15,
+						MaxChunkSize: 1000,
+						MaxChunkNumber: 5,
 					}
 					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
 
