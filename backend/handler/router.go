@@ -124,7 +124,9 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	router.Route("/v2", func(router chi.Router) {
 		router.Route("chats", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", chatHandler.GetUserChats)
 			router.Post("/login", chatHandler.Login)
+			router.Post("/", chatHandler.CreateUserChat)
 		})
 	})
 

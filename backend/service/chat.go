@@ -25,6 +25,32 @@ func (s *ChatService) GetChat(ctx context.Context, id uuid.UUID) (*model.Chat, e
 	return chat, nil
 }
 
+func (s *ChatService) GetChatQAs(ctx context.Context, user string) ([]*model.ChatQA, error) {
+	uh := getUserHash(user)
+	chats, err := s.ChatRepository.ListChatsUser(ctx, uh)
+	if err != nil {
+		return nil, err
+	}
+
+	chatqas := make([]*model.ChatQA, 0)
+
+	for _, chat := range chats {
+		qas, err := s.QARepository.ListChatIdQAs(ctx, chat.ID.String())
+		if err != nil {
+			return nil, err
+		}
+
+		chatqas = append(chatqas, &model.ChatQA{
+			ID:       chat.ID,
+			CreateAt: chat.CreatedAt,
+			Title:    chat.Title,
+			QAs:      qas,
+		})
+	}
+
+	return chatqas, nil
+}
+
 func (s *ChatService) ChatLogin(ctx context.Context, chatId string, user string) ([]*model.ChatQA, error) {
 	uh := getUserHash(user)
 	id, err := uuid.Parse(chatId)
@@ -87,6 +113,26 @@ func (s *ChatService) CreateChat(ctx context.Context, sessionId string) (*model.
 	}
 
 	return chat, nil
+}
+
+func (s *ChatService) CreateUserChat(ctx context.Context, user string) (*model.Chat, error) {
+	id := uuid.New()
+	uh := getUserHash(user)
+	chat := &model.Chat{
+		ID:        id,
+		Object:    "chat",
+		Title:     "새로운 채팅",
+		SessionID: "",
+		UserHash:  uh,
+	}
+
+	err := s.ChatRepository.CreateChat(ctx, chat)
+	if err != nil {
+		return nil, err
+	}
+
+	return chat, nil
+
 }
 
 func (s *ChatService) ListChats(ctx context.Context, sessionId string) ([]*model.Chat, error) {
