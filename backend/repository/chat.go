@@ -52,10 +52,34 @@ func (r *ChatRepository) UpdateChat(ctx context.Context, chat *model.Chat) (*mod
 	return chat, nil
 }
 
+func (r *ChatRepository) UpdateChatUser(ctx context.Context, chat *model.Chat) (*model.Chat, error) {
+	res := r.db.WithContext(ctx).Model(chat).Updates(
+		model.Chat{
+			UserHash: chat.UserHash,
+		},
+	)
+
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	if res.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	return chat, nil
+}
+
 func (r *ChatRepository) ListChats(ctx context.Context, sessionId string) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	result := r.db.Where("session_id = ?", sessionId).Order("created_at desc").Find(&chats)
 	return chats, result.Error
+}
+
+func (r *ChatRepository) ListChatsUser(ctx context.Context, uh string) ([]*model.Chat, error) {
+	var chats []*model.Chat
+	res := r.db.WithContext(ctx).Where("user_hash = ?", uh).Order("created_at desc").Find(&chats)
+	return chats, res.Error
 }
 
 func (r *ChatRepository) DeleteChat(ctx context.Context, id uuid.UUID) error {

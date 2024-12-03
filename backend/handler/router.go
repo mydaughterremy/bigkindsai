@@ -44,6 +44,11 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		panic(err)
 	}
 
+	issueService, err := service.NewIssueService()
+	if err != nil {
+		panic(err)
+	}
+
 	chatHandler := &ChatHandler{
 		ChatService: chatService,
 	}
@@ -70,6 +75,14 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 	tutorialHandler := &tutorialHandler{
 		service: &service.TutorialService{},
+	}
+
+	issueHandler := &IssueHandler{
+		Service: issueService,
+	}
+
+	newsHandler := &NewsHandler{
+		Service: &service.NewsService{},
 	}
 
 	router.Use(log.RequestLogMiddleware)
@@ -121,10 +134,23 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		})
 	})
 
-	router.Route("/dev", func(router chi.Router) {
+	router.Route("/v2", func(router chi.Router) {
 		router.Route("/chats", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
+			router.Get("/", chatHandler.GetUserChats)
+			router.Post("/login", chatHandler.Login)
+			router.Post("/", chatHandler.CreateUserChat)
 			router.Post("/{chat_id}/completions/multi", completionHandler.CreateChatCompletionMulti)
+		})
+		router.Route("/issue", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Route("/topic", func(router chi.Router) {
+				router.Get("/summary", issueHandler.GetIssueTopicSummary)
+			})
+		})
+		router.Route("/news", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Post("/summary", newsHandler.GetNewsSummary)
 		})
 	})
 

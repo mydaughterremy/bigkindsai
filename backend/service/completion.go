@@ -80,10 +80,13 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 	}
 
 	messages := make([]*model.Message, 0)
-	messages = append(messages, &model.Message{
-		Content: qa.Answer,
-		Role:    "assistant",
-	})
+
+	if qa.Answer != "" {
+		messages = append(messages, &model.Message{
+			Content: qa.Answer,
+			Role:    "assistant",
+		})
+	}
 
 	if qa.References != nil {
 		b, err := json.Marshal(qa.References)
@@ -100,10 +103,12 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 		})
 	}
 
-	messages = append(messages, &model.Message{
-		Role:    "user",
-		Content: qa.Question,
-	})
+	if qa.Question != "" {
+		messages = append(messages, &model.Message{
+			Role:    "user",
+			Content: qa.Question,
+		})
+	}
 
 	param.Messages = append(messages, param.Messages...)
 

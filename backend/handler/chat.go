@@ -22,6 +22,58 @@ type CreateChatRequest struct {
 	Session string `json:"session"`
 }
 
+type LoginChatRequest struct {
+	ChatId string `json:"chat_id"`
+	User   string `json:"user"`
+}
+
+type CreateUserChatRequest struct {
+	User string `json:"user"`
+}
+
+type ChatError struct {
+	ErrMessage string
+}
+
+func (c *ChatError) Error() string {
+	return c.ErrMessage
+}
+
+func (h *ChatHandler) Login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := LoginChatRequest{}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+	}
+
+	chatqas, err := h.ChatService.ChatLogin(ctx, req.ChatId, req.User)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, chatqas)
+
+}
+
+func (h *ChatHandler) CreateUserChat(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := CreateUserChatRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+	}
+
+	chat, err := h.ChatService.CreateUserChat(ctx, req.User)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusCreated, chat)
+
+}
+
 func (h *ChatHandler) GetChat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	chatId := chi.URLParam(r, "chat_id")
@@ -41,6 +93,23 @@ func (h *ChatHandler) GetChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, chat)
+}
+
+func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := r.URL.Query().Get("user")
+
+	if u == "" {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, &ChatError{"user value is empty"})
+	}
+
+	chatqas, err := h.ChatService.GetChatQAs(ctx, u)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, chatqas)
+
 }
 
 func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
