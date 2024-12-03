@@ -53,6 +53,10 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueriesSolar(ctx 
 		func(o *chat.GptOptions) {
 			o.Streamable = false
 		})
+	
+	if err != nil{
+		return nil ,0 , fmt.Errorf("client error")
+	}
 
 	opts := make([]func(options *chat.GptPredictionOptions), 0)
 	opts = append(opts, chat.WithModel(modelName))

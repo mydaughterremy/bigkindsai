@@ -23,8 +23,10 @@ type SearchPlugin struct {
 }
 
 func mergeChunks(chunks []*model.Reference) []*model.Reference {
-	const maxChunkSize = 1000
-	const maxChunkNumber = 5
+	//const maxChunkSize = 1000
+	//const maxChunkNumber = 5
+	const maxChunkSize = 2000
+	const maxChunkNumber = 10
 
 	mergedChunks := make([]*model.Reference, 0, maxChunkNumber)
 
@@ -208,11 +210,11 @@ func (s *SearchPlugin) createSearchRequests(arguments map[string]interface{}, ex
 	if !ok {
 		standaloneQuery = rawQuery // fallback to raw query
 	}
-
 	_, ok = arguments["published_date_range"]
 	if !ok {
 		// case 1: no date range specified
 		body = handleDateRangeNotSpecified(rawQuery, standaloneQuery, topK)
+		fmt.Println(rawQuery)
 	} else {
 		// case 2: date range specified
 		var publishedDateRange model.PublishedDateRange

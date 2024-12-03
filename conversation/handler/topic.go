@@ -13,7 +13,7 @@ type topicHandler struct {
 }
 
 type findTopicSummaryRequest struct {
-	Message string `json:"message"`
+	Topic string `json:"topic"`
 }
 
 func (topicHandler *topicHandler) HandleTopic(responseWriter http.ResponseWriter, request *http.Request) {
@@ -21,10 +21,10 @@ func (topicHandler *topicHandler) HandleTopic(responseWriter http.ResponseWriter
 	context := request.Context()
 	var topicRequest findTopicSummaryRequest
 	err := json.NewDecoder(request.Body).Decode(&topicRequest)
-	if err != nil {
+	if err != nil || topicRequest.Topic == "" {
 		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 	}
-	topicResponse, err := topicHandler.service.GetTopic(context, topicRequest.Message)
+	topicResponse, err := topicHandler.service.GetTopic(context, topicRequest.Topic)
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 	}
