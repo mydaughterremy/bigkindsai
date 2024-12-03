@@ -1,8 +1,6 @@
 package service
 
 import (
-	"bigkinds.or.kr/conversation/internal/llmclient"
-	"bigkinds.or.kr/pkg/chat/v2/gpt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +15,9 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"bigkinds.or.kr/conversation/internal/llmclient"
+	"bigkinds.or.kr/pkg/chat/v2/gpt"
 
 	"bigkinds.or.kr/pkg/chat/v2"
 	"bigkinds.or.kr/pkg/utils"
@@ -508,6 +509,7 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 					extraArgs := &function.ExtraArgs{
 						RawQuery: lastUserMessage.Content,
 						Provider: articleProvider,
+						Topk: 15,
 					}
 					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
 

@@ -1,14 +1,10 @@
 package service
 
 import (
-	"bigkinds.or.kr/conversation/internal/llmclient"
-	"bigkinds.or.kr/pkg/chat/v2"
-	"bigkinds.or.kr/pkg/chat/v2/gpt"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai"
 	"io"
 	"log"
 	"log/slog"
@@ -17,6 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"bigkinds.or.kr/conversation/internal/llmclient"
+	"bigkinds.or.kr/pkg/chat/v2"
+	"bigkinds.or.kr/pkg/chat/v2/gpt"
+	"github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai"
 
 	"bigkinds.or.kr/conversation/internal/token_counter"
 	"bigkinds.or.kr/conversation/model"
@@ -257,4 +258,35 @@ question: "윤석열 대통령 베네딕토 16세 전 교황 평가"
     "related_queries": ["윤석열 대통령의 최근 행보에 대해서 말해줄래?", "베네딕토 16세 전 교황의 업적은 무엇이 있어?"]
 }
 Please provide the results in JSON format with the following two keys: 'keywords' and 'related_queries'`, keywordQuery)
+}
+func getTopicKeywordPrompt() string {
+	return `Please follow below instructions.
+0) Your responses "should be" in Korean.
+    - One word that best represents the question.
+    - Please generate it with one.
+1) Generate <related_queries> for each of the <keywords> from a user's question.
+    - The meaning of each generated sentence must differ from the question, and the meaning between each sentence must also be distinct.
+
+<example>
+question: "윤석열 대통령"
+answer : {
+    "keywords": ["윤석열", "대통령"],
+    "related_queries": ["윤석열 대통령의 최근 행보에 대해서 말해줄래?"]
+}
+Please provide the results in JSON format with the following two keys: 'keywords' and 'related_queries'`
+}
+func getSummaryPrompt(summaryQuery string) string {
+	return fmt.Sprintf(`Please follow below instructions.
+0) Your responses "should be" in Korean.
+1) summary sentence <%s>.
+2) Generate <title> and <content>
+	- 'title' is the title of the summary
+	- content is a summary
+<output>
+{
+	"title": "title..."
+	"content": "content..."
+}
+Please provide the results in JSON format with the following two keys: 'title' and 'content'`,
+		summaryQuery)
 }

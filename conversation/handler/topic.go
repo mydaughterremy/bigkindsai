@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"bigkinds.or.kr/conversation/internal/http/response"
-	"bigkinds.or.kr/conversation/service"
 	"encoding/json"
 	"net/http"
+
+	"bigkinds.or.kr/conversation/internal/http/response"
+	"bigkinds.or.kr/conversation/service"
 )
 
 type topicHandler struct {
@@ -12,10 +13,10 @@ type topicHandler struct {
 }
 
 type findTopicSummaryRequest struct {
-	message string `json:"message"`
+	Message string `json:"message"`
 }
 
-func (topicHandler *topicHandler) handleTopic(responseWriter http.ResponseWriter, request *http.Request) {
+func (topicHandler *topicHandler) HandleTopic(responseWriter http.ResponseWriter, request *http.Request) {
 
 	context := request.Context()
 	var topicRequest findTopicSummaryRequest
@@ -23,7 +24,7 @@ func (topicHandler *topicHandler) handleTopic(responseWriter http.ResponseWriter
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 	}
-	topicResponse, err := topicHandler.service.GetTopic(context, topicRequest.message)
+	topicResponse, err := topicHandler.service.GetTopic(context, topicRequest.Message)
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(responseWriter, request, http.StatusBadRequest, err)
 	}

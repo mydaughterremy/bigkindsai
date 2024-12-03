@@ -30,12 +30,18 @@ func NewRouter() chi.Router {
 		tokenCounter,
 	)
 	topicService := service.NewTopicService()
+	
+	summaryService := service.NewSummaryService()
 
 	completionHandler := &completionHandler{
 		service: completionService,
 	}
 	topicHandler := &topicHandler{
 		service: topicService,
+	}
+	
+	summaryHandler := &summaryHandler{
+		service: summaryService,
 	}
 
 	router.Use(log.RequestLogMiddleware)
@@ -45,7 +51,8 @@ func NewRouter() chi.Router {
 		router.Post("/chat/completions", completionHandler.CreateChatCompletion)
 	})
 	router.Route("/v2", func(router chi.Router) {
-		router.Post("/topic", topicHandler.handleTopic)
+		router.Post("/topic", topicHandler.HandleTopic)
+		router.Post("/summary", summaryHandler.SummaryContent)
 	})
 
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
