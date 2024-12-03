@@ -39,6 +39,4 @@ func (h *IssueHandler) GetIssueTopicSummary(w http.ResponseWriter, r *http.Reque
 	}
 
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, its)
-	return
-
 }
