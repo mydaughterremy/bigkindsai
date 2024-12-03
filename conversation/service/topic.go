@@ -58,11 +58,17 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	if err != nil {
 		return nil, err
 	}
-	messages := make([]*chat.ChatPayload, 1)
-	messages[0] = &chat.ChatPayload{
-		Role:    "system",
-		Content: getKeywordPrompt(topicMessage),
+	messages := []*chat.ChatPayload{
+		{
+			Role:    "system",
+			Content: getTopicKeywordPrompt(),
+		},
+		{
+			Role:    "user",
+			Content: topicMessage,
+		},
 	}
+
 	response, err := client.CreateChat(context, models[0], messages, chat.WithModel(models[1]))
 	if err != nil {
 		slog.Error("create keyword chat","error", err)
@@ -77,13 +83,15 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	if err != nil {
 		return nil, err
 	}
+
 	arguments, err := function.ParseFunctionArguments(callResponse.Arguments)
 	if err != nil {
 		return nil, err
 	}
+
 	extraArgs := &function.ExtraArgs{
 		RawQuery: topicMessage,
-		Topk: 100,
+		Topk: 300,
 	}
 
 	searchByte, err := topicService.search.Call(context, arguments, extraArgs)
@@ -96,6 +104,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	if err = json.Unmarshal(searchByte, &items); err != nil {
 		return nil, err
 	}
+
 	var contents string
 	var news_ids []string
 	for i, item := range items.Items {
@@ -145,7 +154,6 @@ func parsingKeywordResponse(response *http.Response) (*gpt.ChatCompletionFunctio
 	if len(chatResponse.Choices) == 0 {
 		return nil, errors.New("no choice")
 	}
-
 	if chatResponse.Choices[0].FinishReason == "stop" {
 		if chatResponse.Choices[0].Message.Content != "" {
 			content := chatResponse.Choices[0].Message.Content

@@ -401,6 +401,7 @@ func (s *SearchServiceServer) MSearch(ctx context.Context, req *proto.MSearchReq
 	profile.MSearchProfile.TotalElapsedTime = calculateMS(time.Since(msearchStartTime).Nanoseconds())
 
 	logger.Info("msearch profile", zap.Any("profile", profile))
+
 	return &proto.MSearchResponse{
 		Items: itemsList,
 	}, nil

@@ -1,10 +1,11 @@
 package searcher
 
 import (
-	"bigkinds.or.kr/search/service/searcher/opensearch"
-	"bigkinds.or.kr/search/service/searcher/opensearch/query_strategy"
 	"context"
 	"errors"
+
+	"bigkinds.or.kr/search/service/searcher/opensearch"
+	"bigkinds.or.kr/search/service/searcher/opensearch/query_strategy"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"bigkinds.or.kr/pkg/log"
