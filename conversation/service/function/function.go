@@ -20,6 +20,8 @@ type ExtraArgs struct {
 	RawQuery string `json:"raw_query"`
 	Provider string `json:"provider"`
 	Topk int `json:"top_k"`
+	MaxChunkSize int `json:"max_chunk_size"`
+	MaxChunkNumber int `json:"max_chunk_number"`
 }
 
 type FunctionService struct {

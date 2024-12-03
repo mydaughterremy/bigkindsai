@@ -22,11 +22,9 @@ type SearchPlugin struct {
 	CurrentTime utils.CurrentTime
 }
 
-func mergeChunks(chunks []*model.Reference) []*model.Reference {
-	//const maxChunkSize = 1000
-	//const maxChunkNumber = 5
-	const maxChunkSize = 2000
-	const maxChunkNumber = 10
+func mergeChunks(chunks []*model.Reference, extraArgs *ExtraArgs) []*model.Reference {
+	maxChunkSize := extraArgs.MaxChunkSize
+	maxChunkNumber := extraArgs.MaxChunkNumber
 
 	mergedChunks := make([]*model.Reference, 0, maxChunkNumber)
 
@@ -298,7 +296,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 		return nil, err
 	}
 
-	merged := mergeChunks(references)
+	merged := mergeChunks(references,extraArgs)
 	body, err = marshalReference(merged)
 	if err != nil {
 		return nil, err
@@ -306,6 +304,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 
 	return body, nil
 }
+
 
 func (s *SearchPlugin) Definition() model.Function {
 	firstExampleStartTime := time.Date(s.CurrentTime.Time.Year(), s.CurrentTime.Time.Month(), s.CurrentTime.Time.Day(), 0, 0, 0, 0, s.CurrentTime.Location).AddDate(0, 0, -30).Format("2006-01-02T15:04:05-07:00")
