@@ -115,7 +115,7 @@ func (s *ChatService) CreateChat(ctx context.Context, sessionId string) (*model.
 	return chat, nil
 }
 
-func (s *ChatService) CreateUserChat(ctx context.Context, user string) (*model.Chat, error) {
+func (s *ChatService) CreateUserChat(ctx context.Context, user string) (*CreateUserChatResponse, error) {
 	id := uuid.New()
 	uh := getUserHash(user)
 	chat := &model.Chat{
@@ -131,8 +131,20 @@ func (s *ChatService) CreateUserChat(ctx context.Context, user string) (*model.C
 		return nil, err
 	}
 
-	return chat, nil
+	res := CreateUserChatResponse{
+		ID:        chat.ID.String(),
+		Title:     chat.Title,
+		CreatedAt: chat.CreatedAt.String(),
+	}
 
+	return &res, nil
+
+}
+
+type CreateUserChatResponse struct {
+	ID        string `json:"chat_id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
 }
 
 func (s *ChatService) ListChats(ctx context.Context, sessionId string) ([]*model.Chat, error) {

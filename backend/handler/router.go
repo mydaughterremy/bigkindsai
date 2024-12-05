@@ -49,6 +49,11 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		panic(err)
 	}
 
+	newsService, err := service.NewNewsService()
+	if err != nil {
+		panic(err)
+	}
+
 	chatHandler := &ChatHandler{
 		ChatService: chatService,
 	}
@@ -82,7 +87,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	}
 
 	newsHandler := &NewsHandler{
-		Service: &service.NewsService{},
+		Service: newsService,
 	}
 
 	router.Use(log.RequestLogMiddleware)
@@ -145,7 +150,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		router.Route("/issue", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
 			router.Route("/topic", func(router chi.Router) {
-				router.Get("/summary", issueHandler.GetIssueTopicSummary)
+				router.Post("/summary", issueHandler.GetIssueTopicSummary)
 			})
 		})
 		router.Route("/news", func(router chi.Router) {

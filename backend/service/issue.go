@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func NewIssueService() (*IssueService, error) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
 		},
 	}
 
@@ -40,8 +41,17 @@ func NewIssueService() (*IssueService, error) {
 	return s, nil
 }
 
-func (s *IssueService) CreateIssueTopicSummary(ctx context.Context, rb []byte) (*model.IssueTopicSummary, error) {
-	its, err := request.ConvIssueTopicSummaryRequest(ctx, s.client, s.convEngine, rb)
+func (s *IssueService) CreateIssueTopicSummary(ctx context.Context, topic string) (*model.IssueTopicSummary, error) {
+	itp := IssueTopicSummaryParam{
+		Topic: topic,
+	}
+
+	reqBody, err := json.Marshal(itp)
+	if err != nil {
+		return nil, err
+	}
+
+	its, err := request.ConvIssueTopicSummaryRequest(ctx, s.client, s.convEngine, reqBody)
 	if err != nil {
 		return nil, err
 	}

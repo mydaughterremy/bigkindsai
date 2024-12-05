@@ -26,12 +26,7 @@ func (h *IssueHandler) GetIssueTopicSummary(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
-	}
-
-	its, err := h.Service.CreateIssueTopicSummary(ctx, reqBody)
+	its, err := h.Service.CreateIssueTopicSummary(ctx, req.Topic)
 
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
