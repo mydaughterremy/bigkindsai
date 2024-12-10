@@ -45,14 +45,16 @@ func getKeywordQuery(sargs string) (string, error) {
 }
 
 // 수정
+// 키워드 , 연관 키워드 API 
 func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueriesSolar(ctx context.Context, modelName string, arguments string) (*model.KeywordsRelatedQueries, int, error) {
 	models := chat.GetLLMOptions()
-	llm, err := llmclient.NewSolarClient(&http.Client{
-		Timeout: 30 * time.Second, // 타임아웃 설정
-	}, models[1],
-		func(o *chat.GptOptions) {
-			o.Streamable = false
-		})
+	llm, err := llmclient.NewSolarClient(
+		&http.Client{
+			Timeout: 30 * time.Second, // 타임아웃 설정
+		},
+		models[1],
+		chat.WithStreamDisabled,
+	)
 	
 	if err != nil{
 		return nil ,0 , fmt.Errorf("client error")
