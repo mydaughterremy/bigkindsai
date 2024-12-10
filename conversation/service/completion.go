@@ -518,6 +518,11 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 					}
 					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
 
+					if err != nil {
+						loopError = err
+						break
+					}
+
 					slog.Info("try to generate keywords and relatedQueries", "provider", completionLLM.Provider, "model", completionLLM.ModelName)
 
 					// 수정 query 가져오기
