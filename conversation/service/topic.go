@@ -45,6 +45,7 @@ func NewTopicService() *TopicService {
 	return topicService
 }
 
+// 오늘의 이슈 요약, 뉴스 정보 조회 
 func (topicService *TopicService) GetTopic(context context.Context, topicMessage string) (*FindTopicResponse, error) {
 
 	models := chat.GetLLMOptions()
@@ -53,6 +54,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		models[0],
 		models[1],
 		0,
+		// streaming 비활성화
 		chat.WithStreamDisabled,
 	)
 	if err != nil {
@@ -69,6 +71,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		},
 	}
 
+	// 기존 llm request 이용
 	response, err := client.CreateChat(context, models[0], messages, chat.WithModel(models[1]))
 	if err != nil {
 		slog.Error("create keyword chat","error", err)
@@ -91,11 +94,15 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 
 	extraArgs := &function.ExtraArgs{
 		RawQuery: topicMessage,
+		// 최대 뉴스 조회 개수
 		Topk: 300,
+		// 최대 뉴스 병합 size
 		MaxChunkSize: 60000,
+		// 최대 뉴스 병합 개수 
 		MaxChunkNumber: 300,
 	}
 
+	// 기존 search 소스코드 활용
 	searchByte, err := topicService.search.Call(context, arguments, extraArgs)
 	if err != nil {
 		return nil, err
@@ -121,6 +128,8 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		Role:    "system",
 		Content: getSummaryPrompt(contents),
 	}
+	
+	// 기존 llm request 이용
 	summaryResponse, err := client.CreateChat(context, models[0], summaryMessage, chat.WithModel(models[1]))
 	if err != nil {
 		slog.Error("create summary chat ","error", err)

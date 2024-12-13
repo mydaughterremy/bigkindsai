@@ -97,10 +97,13 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 		url := os.Getenv("UPSTAGE_EMBEDDING_URL")
 
 		rerankerStartTime := time.Now()
+		// 기존 리랭커 코드
 		//reranker, err := getReranker(s.RerankerProvider, rerankerConfig.RerankerType)
 		//if err != nil {
 		//	return nil, err
 		//}
+
+		// solar 임베딩 코드
 		reranker := &pr.SolarReranker{
 			Embedder: &pr.SolarEmbedding{
 				Client:  &http.Client{},
@@ -114,9 +117,11 @@ func (s *SearchServiceServer) getSearchResults(ctx context.Context, searcher ps.
 		if err != nil {
 			return nil, err
 		}
-
+		
+		// 기존 리랭커 코드
 		//rerankedItems, err := reranker.Rerank(ctx, rerankerConfig, rerankQuery, items, originalTopk)
 
+		// 솔라 리랭커 코드
 		rerankedItems, err := reranker.Rerank(rerankQuery, items, originalTopk)
 
 		if errors.Is(err, pr.ErrRerankerTimeout) {

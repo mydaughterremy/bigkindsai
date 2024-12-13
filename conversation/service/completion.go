@@ -449,7 +449,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 							done = true
 							break
 						}
-
+					// chat gpt 의 경우 function call
+					// solar 의 경우 tool call 만 동작함
 						if (completionLLM.Provider == "upstage" && resp.ToolCalls == nil) ||
 							(completionLLM.Provider == "openai" && resp.FunctionCall == nil) {
 							completion := &model.Completion{
@@ -477,6 +478,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 					loopError = fmt.Errorf("no choices")
 					break
 				} else if response.Choices[0].FinishReason == "function_call" || response.Choices[0].FinishReason == "tool_calls" {
+					// chat gpt 의 경우 function call
+					// solar 의 경우 tool call 만 동작함
 					callResponse := &gpt.ChatCompletionFunctionCallResp{}
 					if response.Choices[0].FinishReason == "function_call" {
 						callResponse.Name = response.Choices[0].Message.FunctionCall.Name
@@ -514,6 +517,11 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 						MaxChunkNumber: 5,
 					}
 					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
+
+					if err != nil {
+						loopError = err
+						break
+					}
 
 					slog.Info("try to generate keywords and relatedQueries", "provider", completionLLM.Provider, "model", completionLLM.ModelName)
 

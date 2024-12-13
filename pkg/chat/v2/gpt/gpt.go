@@ -193,6 +193,7 @@ func (g *GPT) CreateRequest(ctx context.Context, messages []*chat.ChatPayload, o
 	return req, nil
 }
 
+// Solar request
 func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPayload, options chat.GptPredictionOptions) (*http.Request, error) {
 	var (
 		functions         []*json.RawMessage
@@ -248,15 +249,7 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 		solarMessages = append(solarMessages, message)
 
 	}
-	// 수정
-	//if options.Functions != nil {
-	//	rawFunctions := make([]*json.RawMessage, len(options.Functions))
-	//	for i, function := range options.Functions {
-	//		rm := json.RawMessage(function)
-	//		rawFunctions[i] = &rm
-	//	}
-	//	functions = rawFunctions
-	//}
+
 	if options.Functions != nil {
 		tools = make([]*json.RawMessage, len(options.Functions))
 		for i, function := range options.Functions {
@@ -274,15 +267,7 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 		}
 		rawFunctionCall = json.RawMessage(*options.FunctionCall)
 	}
-	// tool call
-	//if options.Tools != nil {
-	//	rawTools := make([]*json.RawMessage, len(options.Tools))
-	//	for i, tool := range options.Tools {
-	//		rm := json.RawMessage(tool)
-	//		rawTools[i] = &rm
-	//	}
-	//	tools = rawTools
-	//}
+
 
 	if options.ToolChoice != nil {
 		// json.RawMessage should be wrapped with double quotes or braces
