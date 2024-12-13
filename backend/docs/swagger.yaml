@@ -1,0 +1,120 @@
+basePath: /v1
+definitions:
+  handler.CreateChatCompletionRequest:
+    properties:
+      job_group:
+        example: 통계용
+        type: string
+      message:
+        example: 트럼프 당선에 대해서 알려줘
+        type: string
+      provider:
+        example: ""
+        type: string
+      session:
+        example: session_id_value
+        type: string
+    type: object
+  model.Completion:
+    properties:
+      created:
+        type: integer
+      delta:
+        $ref: '#/definitions/model.CompletionDelta'
+      id:
+        type: string
+      object:
+        type: string
+      token_usage:
+        type: integer
+    type: object
+  model.CompletionDelta:
+    properties:
+      content:
+        type: string
+      keywords:
+        items:
+          type: string
+        type: array
+      references:
+        items:
+          $ref: '#/definitions/model.Reference'
+        type: array
+      related_queries:
+        items:
+          type: string
+        type: array
+    type: object
+  model.Reference:
+    properties:
+      attributes:
+        $ref: '#/definitions/model.ReferenceAttributes'
+      id:
+        type: string
+    type: object
+  model.ReferenceAttributes:
+    properties:
+      byline:
+        type: string
+      content:
+        type: string
+      news_id:
+        type: string
+      provider:
+        type: string
+      published_at:
+        type: string
+      title:
+        type: string
+    type: object
+  service.CreateChatCompletionResult:
+    properties:
+      completion:
+        $ref: '#/definitions/model.Completion'
+      done:
+        type: boolean
+      error: {}
+    type: object
+host: gnew-biz.tplinkdns.com:8080
+info:
+  contact: {}
+  description: This API for Bigkinds AI web service.
+  title: Bigkinds AI
+paths:
+  /chats/{chat_id}/completions:
+    post:
+      consumes:
+      - application/json
+      description: Create a new Completion
+      parameters:
+      - default: Bearer upstage_kindsai_key
+        description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: ffacea9b-d5a1-4844-8a0f-520b69a93ac3
+        description: chat_id
+        in: path
+        name: chat_id
+        required: true
+        type: string
+      - description: CreateChatCompletionRequest
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateChatCompletionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/service.CreateChatCompletionResult'
+      security:
+      - BearerAuth: []
+      summary: Create a new Completion
+      tags:
+      - chats
+swagger: "2.0"

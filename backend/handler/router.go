@@ -15,6 +15,8 @@ import (
 	"bigkinds.or.kr/backend/service"
 
 	"bigkinds.or.kr/pkg/log"
+
+	_ "bigkinds.or.kr/backend/docs"
 )
 
 func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
@@ -166,7 +168,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	})
 
 	router.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+		httpSwagger.URL("http://gnew-biz.tplinkdns.com:8080/swagger/doc.json"),
 	))
 
 	return router

@@ -17,10 +17,10 @@ type completionHandler struct {
 }
 
 type CreateChatCompletionRequest struct {
-	Message  string `json:"message"`
-	Session  string `json:"session"`
-	JobGroup string `json:"job_group"`
-	Provider string `json:"provider"`
+	Message  string `json:"message" example:"트럼프 당선에 대해서 알려줘"`
+	Session  string `json:"session" example:"session_id_value"`
+	JobGroup string `json:"job_group" example:"통계용"`
+	Provider string `json:"provider" example:""`
 }
 
 type DevCreateChatCompletionMulti struct {
@@ -95,6 +95,18 @@ func (h *completionHandler) CreateChatCompletionMulti(w http.ResponseWriter, r *
 	waitGroup.Wait()
 }
 
+// CreateChatCompletion godoc
+// @Summary Create a new Completion
+// @Description Create a new Completion
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param Authorization header string true "Bearer {token}" default(Bearer upstage_kindsai_key)
+// @Param chat_id path string true "chat_id" default(ffacea9b-d5a1-4844-8a0f-520b69a93ac3)
+// @Param message body CreateChatCompletionRequest true "CreateChatCompletionRequest"
+// @Success 201 {object} service.CreateChatCompletionResult
+// @Router /chats/{chat_id}/completions [post]
 func (h *completionHandler) CreateChatCompletion(responseWriter http.ResponseWriter, request *http.Request) {
 	context := request.Context()
 

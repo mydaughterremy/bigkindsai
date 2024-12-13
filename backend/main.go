@@ -52,7 +52,9 @@ func NewWriter() *kafka.Writer {
 // @title Bigkinds AI
 // @ version 2.0
 // @description This API for Bigkinds AI web service.
-// @host
+// @host gnew-biz.tplinkdns.com:8080
+// @BasePath /v1
+
 func main() {
 	arg.MustParse(&args)
 	_ = godotenv.Load()
