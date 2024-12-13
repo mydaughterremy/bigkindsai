@@ -49,6 +49,10 @@ func NewWriter() *kafka.Writer {
 	return writer
 }
 
+// @title Bigkinds AI
+// @ version 2.0
+// @description This API for Bigkinds AI web service.
+// @host
 func main() {
 	arg.MustParse(&args)
 	_ = godotenv.Load()

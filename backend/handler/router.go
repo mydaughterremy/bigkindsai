@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/segmentio/kafka-go"
+	httpSwagger "github.com/swaggo/http-swagger"
 
 	"gorm.io/gorm"
 
@@ -163,6 +164,10 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		responseWriter.WriteHeader(http.StatusOK)
 		_, _ = responseWriter.Write([]byte("OK"))
 	})
+
+	router.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
 
 	return router
 }
