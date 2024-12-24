@@ -53,7 +53,7 @@ func (k *KeywordsRelatedQueriesService) GenerateKeywordsRelatedQueriesSolar(ctx 
 			Timeout: 30 * time.Second, // 타임아웃 설정
 		},
 		models[1],
-		chat.WithStreamDisabled,
+		chat.WithStreamEnabled,
 	)
 	
 	if err != nil{

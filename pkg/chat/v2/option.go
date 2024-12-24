@@ -136,6 +136,9 @@ func WithFunctions(functions []string) func(*GptPredictionOptions) {
 		o.Functions = functions
 	}
 }
+func WithNoFunctions(options *GptPredictionOptions) {
+	options.Functions = nil
+}
 
 func WithFunctionCall(functionCall string) func(*GptPredictionOptions) {
 	return func(o *GptPredictionOptions) {
@@ -189,6 +192,13 @@ func WithResponseFormat(responseFormat string) func(*GptPredictionOptions) {
 	return func(o *GptPredictionOptions) {
 		o.ResponseFormat = &responseFormat
 	}
+}
+
+func WithNilTollCall(opts *GptPredictionOptions) {
+	opts.Tools = nil
+}
+func WithNilTollChoice(opts *GptPredictionOptions) {
+	opts.ToolChoice = nil
 }
 
 func WithStream(o *GptPredictionOptions) {
