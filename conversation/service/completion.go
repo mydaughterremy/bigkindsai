@@ -161,9 +161,9 @@ func (s *CompletionService) createInitialPayloads(currentTime utils.CurrentTime,
 		Role:    "system",
 	}
 	if provider == "upstage" {
-		systemPayload.Name = new(string)
-		systemPayload.FunctionCall = &chat.ChatFunction{}
-		systemPayload.ToolCalls = make([]*chat.ChatTool, 0)
+		// systemPayload.Name = new(string)
+		// systemPayload.FunctionCall = &chat.ChatFunction{}
+		// systemPayload.ToolCalls = make([]*chat.ChatTool, 0)
 	}
 	payloads = append([]*chat.ChatPayload{systemPayload}, payloads...)
 
@@ -397,6 +397,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 
 			sendKeywordsRelatedQueries := false
 			for {
+				predictOpts = append(predictOpts, chat.WithNilTollCall)
+				predictOpts = append(predictOpts, chat.WithNilTollChoice)
 				// 수정시 볼 곳
 				stream, err := client.CreateChatStream(context, completionLLM.Provider, payloads, predictOpts...)
 				if err != nil {
@@ -449,8 +451,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 							done = true
 							break
 						}
-					// chat gpt 의 경우 function call
-					// solar 의 경우 tool call 만 동작함
+						// chat gpt 의 경우 function call
+						// solar 의 경우 tool call 만 동작함
 						if (completionLLM.Provider == "upstage" && resp.ToolCalls == nil) ||
 							(completionLLM.Provider == "openai" && resp.FunctionCall == nil) {
 							completion := &model.Completion{
@@ -510,10 +512,10 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 						break
 					}
 					extraArgs := &function.ExtraArgs{
-						RawQuery: lastUserMessage.Content,
-						Provider: articleProvider,
-						Topk: 15,
-						MaxChunkSize: 1000,
+						RawQuery:       lastUserMessage.Content,
+						Provider:       articleProvider,
+						Topk:           15,
+						MaxChunkSize:   1000,
 						MaxChunkNumber: 5,
 					}
 					callFunctionResponse, err := s.FunctionService.CallFunction(context, callResponse.Name, callResponse.Arguments, functions, extraArgs)
@@ -601,6 +603,8 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 
 						// remove past search payloads
 						for i := 0; i < len(payloads); i++ {
+							payloads[i].FunctionCall = nil
+							payloads[i].ToolCalls = nil
 							if payloads[i].Name == nil {
 								continue
 							}
@@ -632,6 +636,9 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 						loopError = errors.New("first payload should be system")
 						break
 					}
+					predictOpts = append(predictOpts, chat.WithNilTollCall)
+					predictOpts = append(predictOpts, chat.WithNilTollChoice)
+					predictOpts = append(predictOpts, chat.WithNoFunctions)
 				} else {
 					keywordsRelatedQueriesWg.Wait()
 					completionResultChannel <- &CreateChatCompletionResult{

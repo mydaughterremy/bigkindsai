@@ -51,6 +51,15 @@ func (s *ChatService) GetChatQAs(ctx context.Context, user string) ([]*model.Cha
 	return chatqas, nil
 }
 
+func (s *ChatService) GetQAs(ctx context.Context, chatId string) ([]*model.QA, error) {
+	qas, err := s.QARepository.ListChatIdQAs(ctx, chatId)
+	if err != nil {
+		return nil, err
+	}
+
+	return qas, nil
+}
+
 func (s *ChatService) ChatLogin(ctx context.Context, chatId string, user string) ([]*model.ChatQA, error) {
 	uh := getUserHash(user)
 	id, err := uuid.Parse(chatId)
@@ -164,15 +173,25 @@ func (s *ChatService) DeleteChat(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (s *ChatService) UpdateChatTitle(ctx context.Context, id uuid.UUID, title string) (*model.Chat, error) {
-	chat, err := s.ChatRepository.UpdateChat(ctx, &model.Chat{
-		ID:    id,
-		Title: title,
-	})
+type UpdateChatTitleResponse struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func (s *ChatService) UpdateChatTitle(ctx context.Context, id uuid.UUID, title string) (*UpdateChatTitleResponse, error) {
+	chat, err := s.ChatRepository.UpdateChat(ctx, id, title)
 	if err != nil {
 		return nil, err
 	}
-	return chat, nil
+
+	res := UpdateChatTitleResponse{
+		ID:        chat.ID.String(),
+		Title:     chat.Title,
+		UpdatedAt: chat.UpdatedAt.String(),
+	}
+
+	return &res, nil
 }
 
 func (s *ChatService) ListChatQAs(ctx context.Context, session, chatID string) ([]*model.QA, error) {

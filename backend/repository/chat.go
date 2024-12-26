@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"bigkinds.or.kr/backend/model"
 )
@@ -36,18 +37,17 @@ func (r *ChatRepository) CreateChat(ctx context.Context, chat *model.Chat) error
 	return result.Error
 }
 
-func (r *ChatRepository) UpdateChat(ctx context.Context, chat *model.Chat) (*model.Chat, error) {
-	result := r.db.Model(chat).Updates(
-		model.Chat{
-			Title: chat.Title,
-		},
-	)
+func (r *ChatRepository) UpdateChat(ctx context.Context, Id uuid.UUID, title string) (*model.Chat, error) {
+	chat := &model.Chat{}
+	result := r.db.Model(chat).Clauses(clause.Returning{}).Where("id = ?", Id.String()).Update("title", title)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+
+	chat.ID = Id
 
 	return chat, nil
 }
