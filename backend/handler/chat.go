@@ -95,6 +95,19 @@ func (h *ChatHandler) GetChat(w http.ResponseWriter, r *http.Request) {
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, chat)
 }
 
+func (h *ChatHandler) GetQAs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	chatId := chi.URLParam(r, "chat_id")
+
+	qas, err := h.ChatService.GetQAs(ctx, chatId)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, qas)
+
+}
+
 func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := r.URL.Query().Get("user")
@@ -189,11 +202,12 @@ func (h *ChatHandler) DeleteChat(w http.ResponseWriter, r *http.Request) {
 }
 
 type UpdateChatTitleRequest struct {
-	User  string `json:"user"`
+	// User  string `json:"user"`
 	Title string `json:"title"`
 }
 
 func (h *ChatHandler) UpdateChatTitle(w http.ResponseWriter, r *http.Request) {
+
 	ctx := r.Context()
 
 	req := &UpdateChatTitleRequest{}
@@ -210,11 +224,13 @@ func (h *ChatHandler) UpdateChatTitle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chatId := chi.URLParam(r, "chat_id")
+
 	u, err := uuid.Parse(chatId)
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
 		return
 	}
+
 	chat, err := h.ChatService.UpdateChatTitle(ctx, u, req.Title)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
