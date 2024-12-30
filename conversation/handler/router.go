@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pkoukk/tiktoken-go"
+	"github.com/rs/cors"
 
 	"bigkinds.or.kr/conversation/internal/token_counter"
 	service "bigkinds.or.kr/conversation/service"
@@ -48,6 +49,13 @@ func NewRouter() chi.Router {
 	summaryHandler := &summaryHandler{
 		service: summaryService,
 	}
+
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://192.168.0.101:5500"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders: []string{"Content-Type"}})
+
+	router.Use(c.Handler)
 
 	router.Use(log.RequestLogMiddleware)
 	router.Use(log.ResponseLogMiddleware)

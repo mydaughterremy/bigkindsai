@@ -44,6 +44,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
+	github.com/rs/cors v1.11.1 // indirect
 	github.com/segmentio/kafka-go v0.4.47 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
