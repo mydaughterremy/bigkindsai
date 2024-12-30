@@ -54,11 +54,12 @@ func NewRouter() chi.Router {
 
 	router.Route("/v1", func(router chi.Router) {
 		router.Post("/chat/completions", completionHandler.CreateChatCompletion)
+		router.Post("/chat/completions/multi", completionMultiHandler.CreateChatCompletionMulti)
 	})
 	router.Route("/v2", func(router chi.Router) {
 		router.Post("/topic", topicHandler.HandleTopic)
 		router.Post("/summary", summaryHandler.SummaryContent)
-		router.Post("/chat/completions/multi", completionMultiHandler.CreateChatCompletionMulti)
+
 	})
 
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
