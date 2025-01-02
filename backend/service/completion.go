@@ -110,9 +110,7 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 		})
 	}
 
-	param.Messages = append(messages, param.Messages...)
-
-	messages = param.Messages
+	messages = append(messages, param.Messages...)
 
 	qaId := uuid.New().String()
 	chatId := param.ChatID

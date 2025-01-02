@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 
@@ -21,7 +22,7 @@ type CreateChatCompletionMultiRequest struct {
 
 func (h *completionMultiHandler) CreateChatCompletionMulti(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
+	slog.Info("===== CreateCompoletionMulti")
 	var completionMultiRequest CreateChatCompletionMultiRequest
 	err := json.NewDecoder(r.Body).Decode(&completionMultiRequest)
 	if err != nil {

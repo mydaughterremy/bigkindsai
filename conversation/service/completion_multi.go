@@ -57,7 +57,7 @@ func NewCompletionMultiService(functionService *function.FunctionService, tokenC
 }
 
 func (s *CompletionMultiService) createKeywordsRelatedQueries(ctx context.Context, ch chan *CreateChatCompletionMultiResult, id, provider, modelName, sargs string) {
-	keywordsRelatedQueriesMode := os.Getenv("KEYWORD_RELATED_QUERIES_MODE")
+	keywordsRelatedQueriesMode := os.Getenv("KEYWORDS_RELATED_QUERIES_MODE")
 	switch keywordsRelatedQueriesMode {
 	case "llm":
 		keywordsRelatedQueriesService := &KeywordsRelatedQueriesService{
@@ -346,7 +346,7 @@ func (s *CompletionMultiService) CreateChatCompletionMulti(ctx context.Context, 
 						callResponse.Arguments = response.Choices[0].Message.FunctionCall.Arguments
 					} else {
 						callResponse.Name = response.Choices[0].Message.ToolCalls[0].Function.Name
-						callResponse.Arguments = response.Choices[0].Message.FunctionCall.Arguments
+						callResponse.Arguments = response.Choices[0].Message.ToolCalls[0].Function.Arguments
 					}
 					tokenCount := s.tokenCounter.CountFunctionOutputTokens(callResponse.Arguments)
 					completionMultiResultChannel <- &CreateChatCompletionMultiResult{
