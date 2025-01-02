@@ -4,17 +4,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/segmentio/kafka-go"
-	httpSwagger "github.com/swaggo/http-swagger"
-
-	"gorm.io/gorm"
-
 	"bigkinds.or.kr/backend/middleware/auth"
 	"bigkinds.or.kr/backend/repository"
 	"bigkinds.or.kr/backend/service"
-
 	"bigkinds.or.kr/pkg/log"
+	"github.com/go-chi/chi/v5"
+	"github.com/segmentio/kafka-go"
+	httpSwagger "github.com/swaggo/http-swagger"
+	"gorm.io/gorm"
 
 	_ "bigkinds.or.kr/backend/docs"
 )

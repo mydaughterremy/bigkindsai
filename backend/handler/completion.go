@@ -27,6 +27,18 @@ type DevCreateChatCompletionMulti struct {
 	ChatId string `json:"chat_id"`
 }
 
+// CreateChatCompletionMulti godoc
+// @Summary Create a new CompletionMulti
+// @Description Create a new CompletionMulti
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param Authorization header string true "Bearer {token}" default(Bearer upstage_kindsai_key)
+// @Param chat_id path string true "chat_id" default(ffacea9b-d5a1-4844-8a0f-520b69a93ac3)
+// @Param message body CreateChatCompletionRequest true "CreateChatCompletionRequest"
+// @Success 201 {object} service.CreateChatCompletionResult
+// @Router /v2/chats/{chat_id}/completions/multi [post]
 func (h *completionHandler) CreateChatCompletionMulti(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -106,7 +118,7 @@ func (h *completionHandler) CreateChatCompletionMulti(w http.ResponseWriter, r *
 // @Param chat_id path string true "chat_id" default(ffacea9b-d5a1-4844-8a0f-520b69a93ac3)
 // @Param message body CreateChatCompletionRequest true "CreateChatCompletionRequest"
 // @Success 201 {object} service.CreateChatCompletionResult
-// @Router /chats/{chat_id}/completions [post]
+// @Router /v1/chats/{chat_id}/completions [post]
 func (h *completionHandler) CreateChatCompletion(responseWriter http.ResponseWriter, request *http.Request) {
 	context := request.Context()
 

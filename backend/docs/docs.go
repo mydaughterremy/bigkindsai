@@ -15,7 +15,47 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/chats/{chat_id}/completions": {
+        "/v1/chats/": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new chat",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Create a new chat",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer upstage_kindsai_key",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "CreateChatRequest",
+                        "name": "message",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateChatRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/v1/chats/{chat_id}/completions": {
             "post": {
                 "security": [
                     {
@@ -69,6 +109,100 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/v2/chats/{chat_id}/completions/multi": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new CompletionMulti",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chats"
+                ],
+                "summary": "Create a new CompletionMulti",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer upstage_kindsai_key",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "ffacea9b-d5a1-4844-8a0f-520b69a93ac3",
+                        "description": "chat_id",
+                        "name": "chat_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "CreateChatCompletionRequest",
+                        "name": "message",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateChatCompletionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/service.CreateChatCompletionResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/chats/{chat_id}/qas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "채팅방 아이디를 전달하면 해당 채팅방 아이디에 해당하는 대화이력을 조회 함",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chats"
+                ],
+                "summary": "채팅방의 대화 이력 조회",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer upstage_kindsai_key",
+                        "description": "Bearer {token}",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "ffacea9b-d5a1-4844-8a0f-520b69a93ac3",
+                        "description": "chat_id",
+                        "name": "chat_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
         }
     },
     "definitions": {
@@ -90,6 +224,14 @@ const docTemplate = `{
                 "session": {
                     "type": "string",
                     "example": "session_id_value"
+                }
+            }
+        },
+        "handler.CreateChatRequest": {
+            "type": "object",
+            "properties": {
+                "session": {
+                    "type": "string"
                 }
             }
         },
@@ -192,7 +334,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "",
 	Host:             "gnew-biz.tplinkdns.com:8080",
-	BasePath:         "/v1",
+	BasePath:         "",
 	Schemes:          []string{},
 	Title:            "Bigkinds AI",
 	Description:      "This API for Bigkinds AI web service.",

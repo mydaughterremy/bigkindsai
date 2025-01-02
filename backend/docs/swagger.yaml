@@ -1,4 +1,3 @@
-basePath: /v1
 definitions:
   handler.CreateChatCompletionRequest:
     properties:
@@ -13,6 +12,11 @@ definitions:
         type: string
       session:
         example: session_id_value
+        type: string
+    type: object
+  handler.CreateChatRequest:
+    properties:
+      session:
         type: string
     type: object
   model.Completion:
@@ -81,7 +85,33 @@ info:
   description: This API for Bigkinds AI web service.
   title: Bigkinds AI
 paths:
-  /chats/{chat_id}/completions:
+  /v1/chats/:
+    post:
+      consumes:
+      - application/json
+      description: Create a new chat
+      parameters:
+      - default: Bearer upstage_kindsai_key
+        description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: CreateChatRequest
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateChatRequest'
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: Create a new chat
+      tags:
+      - chats
+  /v1/chats/{chat_id}/completions:
     post:
       consumes:
       - application/json
@@ -115,6 +145,68 @@ paths:
       security:
       - BearerAuth: []
       summary: Create a new Completion
+      tags:
+      - chats
+  /v2/chats/{chat_id}/completions/multi:
+    post:
+      consumes:
+      - application/json
+      description: Create a new CompletionMulti
+      parameters:
+      - default: Bearer upstage_kindsai_key
+        description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: ffacea9b-d5a1-4844-8a0f-520b69a93ac3
+        description: chat_id
+        in: path
+        name: chat_id
+        required: true
+        type: string
+      - description: CreateChatCompletionRequest
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateChatCompletionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/service.CreateChatCompletionResult'
+      security:
+      - BearerAuth: []
+      summary: Create a new CompletionMulti
+      tags:
+      - chats
+  /v2/chats/{chat_id}/qas:
+    get:
+      consumes:
+      - application/json
+      description: 채팅방 아이디를 전달하면 해당 채팅방 아이디에 해당하는 대화이력을 조회 함
+      parameters:
+      - default: Bearer upstage_kindsai_key
+        description: Bearer {token}
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - default: ffacea9b-d5a1-4844-8a0f-520b69a93ac3
+        description: chat_id
+        in: path
+        name: chat_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      security:
+      - BearerAuth: []
+      summary: 채팅방의 대화 이력 조회
       tags:
       - chats
 swagger: "2.0"

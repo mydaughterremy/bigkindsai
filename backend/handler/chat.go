@@ -95,6 +95,16 @@ func (h *ChatHandler) GetChat(w http.ResponseWriter, r *http.Request) {
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, chat)
 }
 
+// 채팅방 대화내용 가져오기 godoc
+// @Summary 채팅방의 대화 이력 조회
+// @Description 채팅방 아이디를 전달하면 해당 채팅방 아이디에 해당하는 대화이력을 조회 함
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param Authorization header string true "Bearer {token}" default(Bearer upstage_kindsai_key)
+// @Param chat_id path string true "chat_id" default(ffacea9b-d5a1-4844-8a0f-520b69a93ac3)
+// @Router /v2/chats/{chat_id}/qas [get]
 func (h *ChatHandler) GetQAs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	chatId := chi.URLParam(r, "chat_id")
@@ -125,6 +135,16 @@ func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// CreateChat godoc
+// @Summary Create a new chat
+// @Description Create a new chat
+// @Tags chats
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param Authorization header string true "Bearer {token}" default(Bearer upstage_kindsai_key)
+// @Param message body CreateChatRequest true "CreateChatRequest"
+// @Router /v1/chats/ [post]
 func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
