@@ -202,6 +202,19 @@ func (s *ChatService) ListChatQAs(ctx context.Context, session, chatID string) (
 	return qas, nil
 }
 
+func (s *ChatService) ListChatQAsLimit(ctx context.Context, chatID string, limit int) ([]*model.QA, error) {
+	// 최대 limit 개수를 5개로 설정
+	// limit의 값이 잘 못 들어온 경우 5로 설정
+	if limit < 1 || 5 < limit {
+		limit = 5
+	}
+	qas, err := s.QARepository.ListChatIdQAsLimit(ctx, chatID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return qas, nil
+}
+
 func (s *ChatService) LastChatQA(ctx context.Context, chatID string) (*model.QA, error) {
 	qa, err := s.QARepository.LastChatQA(ctx, chatID)
 	if err != nil {

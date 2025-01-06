@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -153,6 +154,196 @@ func (s *CompletionMultiService) findLastUserMessage(payloads []*chat.ChatPayloa
 
 // 	return res
 // }
+
+type CreateChatResponse struct {
+	Id      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	Model   string `json:"model"`
+	Choices []CreateChatResponseChoice
+	Usage   CreateChatResponseUsage
+}
+
+type CreateChatResponseChoice struct {
+	Index        int `json:"index"`
+	Message      CreateChatResponseChoiceMessage
+	FinishReason string `json:"finish_reason"`
+}
+
+type CreateChatResponseChoiceToolCall struct {
+	Id   string `json:"id"`
+	Type string `json:"type"`
+}
+
+type CreateChatResponseChoiceToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type CreateChatResponseChoiceMessage struct {
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	ToolCalls []CreateChatResponseChoiceToolCall
+}
+
+type CreateChatResponseUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `jons:"total_tokens"`
+}
+
+func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Context, param *CreateChatCompletionMultiParameter) (chan *CreateChatCompletionMultiResult, error) {
+	// 사용자 메세지 추출
+	slog.Info("===== ===== CreateChatCompletionMultiPrompt")
+
+	payloads := param.Payloads
+	slog.Info("===== ===== payloads")
+
+	for i := 0; i < len(payloads); i++ {
+		slog.Info(fmt.Sprintf("===== ===== i: %d", i))
+		slog.Info(payloads[i].Role)
+		slog.Info(payloads[i].Content)
+	}
+
+	userMessage := s.findLastUserMessage(payloads)
+	// completionId := uuid.New().String()
+
+	llmProvider := "upstage"
+
+	if userMessage == nil {
+		return nil, fmt.Errorf("there is no user message in parameter")
+	}
+
+	currentTime, err := utils.GetCurrentKSTTime()
+	if err != nil {
+		return nil, err
+	}
+
+	// system prompt를 추가
+	var userPayloads []*chat.ChatPayload
+	userPayloads = append(userPayloads, userMessage)
+
+	reqPayloads, err := s.createInitialPayloads(currentTime, userPayloads)
+	if err != nil {
+		return nil, err
+	}
+
+	// function 추출
+	// predict setting
+	predictOpts := setPredictOpts()
+
+	functions := s.FunctionService.ListFunctions(currentTime)
+	if len(functions) > 0 {
+		functionRawJson := make([]string, 0, len(functions))
+		for _, gptFunction := range functions {
+			definition := gptFunction.Definition()
+			marshal, err := json.Marshal(definition)
+			if err != nil {
+				return nil, err
+			}
+			functionRawJson = append(functionRawJson, string(marshal))
+		}
+		predictOpts = append(predictOpts, chat.WithFunctions(functionRawJson))
+	}
+	predictOpts = append(predictOpts, chat.WithoutStream)
+
+	// model setting
+	solarMini := &model.CompletionLLM{
+		Provider:  llmProvider,
+		ModelName: "solar-mini",
+	}
+
+	// 사용자 메세지를 바탕으로 function 추출
+
+	slog.Info("===== ===== before go func")
+
+	// references := make([]model.Reference, 0)
+
+	slog.Info("try to create response", "provider", solarMini.Provider, "model", solarMini.ModelName, "maxFallbackCount", solarMini.MaxFallbackCount)
+	predictOpts = append(predictOpts, chat.WithModel(solarMini.ModelName))
+	client, err := llmclient.NewClient(s.client, solarMini.Provider, solarMini.ModelName, 0, chat.WithStreamEnabled)
+	if err != nil {
+		return nil, err
+	}
+
+	predictOpts = append(predictOpts, chat.WithNilTollCall)
+	predictOpts = append(predictOpts, chat.WithNilTollChoice)
+	// 수정시 볼 곳
+	resp, err := client.CreateChat(ctx, llmProvider, reqPayloads, predictOpts...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	bodyString := string(bodyBytes)
+	// data := strings.Split(bodyString, "data:")
+
+	slog.Info(bodyString)
+
+	var chatResponse CreateChatResponse
+	keyIndex := 0
+	err = json.Unmarshal(bodyBytes, &chatResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	isToolCalls := chatResponse.Choices[0].Message.ToolCalls
+	completionMultiResultChannel := make(chan *CreateChatCompletionMultiResult, 10)
+
+	// 답변 생성은 sloar pro
+	// function이 있는 없는 경우 처리
+	solarPro := &model.CompletionLLM{
+		Provider:  llmProvider,
+		ModelName: "solar-pro",
+	}
+
+	go func() {
+		defer close(completionMultiResultChannel)
+		references := make([]model.Reference, 0)
+
+		// functnion이 있는 경우 처리
+		if isToolCalls != nil {
+			slog.Info("is tool_calls")
+
+		} else {
+			slog.Info("is not tool_calls")
+			// return nil, fmt.Errorf("not finished")
+
+			slog.Info("try to create response", "provider", solarPro.Provider, "model", solarPro.ModelName)
+			predictOpts = setPredictOpts()
+			predictOpts = append(predictOpts, chat.WithModel(solarPro.ModelName))
+
+			client, err := llmclient.NewClient(
+				s.client,
+				solarPro.Provider,
+				solarPro.ModelName,
+				keyIndex,
+				chat.WithStreamEnabled,
+			)
+
+			if err != nil {
+				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+					Error: err,
+				}
+				return
+			}
+
+			// CreateChatStream
+			for {
+				predictOpts = append(predictOpts, chat.WithNilTollCall)
+				predictOpts = append(predictOpts, chat)
+			}
+
+		}
+
+	}()
+
+	return nil, fmt.Errorf("not finished")
+}
 
 func (s *CompletionMultiService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionMultiParameter) (chan *CreateChatCompletionMultiResult, error) {
 	payloads := param.Payloads
@@ -490,6 +681,7 @@ func (s *CompletionMultiService) CreateChatCompletionMulti(ctx context.Context, 
 						loopError = errors.New("first payload must be system")
 						break
 					}
+
 					predictOpts = append(predictOpts, chat.WithNilTollCall)
 					predictOpts = append(predictOpts, chat.WithNilTollChoice)
 					predictOpts = append(predictOpts, chat.WithNoFunctions)

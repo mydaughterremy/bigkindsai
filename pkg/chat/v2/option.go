@@ -205,6 +205,10 @@ func WithStream(o *GptPredictionOptions) {
 	o.Stream = true
 }
 
+func WithoutStream(o *GptPredictionOptions) {
+	o.Stream = false
+}
+
 func WithSeed(seed int64) func(*GptPredictionOptions) {
 	return func(o *GptPredictionOptions) {
 		o.Seed = &seed

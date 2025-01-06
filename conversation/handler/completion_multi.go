@@ -38,10 +38,16 @@ func (h *completionMultiHandler) CreateChatCompletionMulti(w http.ResponseWriter
 		})
 	}
 
-	chatCompletionMultiResult, err = h.s.CreateChatCompletionMulti(ctx, &service.CreateChatCompletionMultiParameter{
+	// chatCompletionMultiResult, err = h.s.CreateChatCompletionMulti(ctx, &service.CreateChatCompletionMultiParameter{
+	// 	Payloads: payloads,
+	// 	Provider: completionMultiRequest.Provider,
+	// })
+
+	chatCompletionMultiResult, err = h.s.CreateChatCompletionMultiPrompt(ctx, &service.CreateChatCompletionMultiParameter{
 		Payloads: payloads,
 		Provider: completionMultiRequest.Provider,
 	})
+
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
 	}

@@ -1,12 +1,13 @@
 package service
 
 import (
-	"bigkinds.or.kr/conversation/internal/llmclient"
-	"bigkinds.or.kr/pkg/chat/v2"
 	"context"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"bigkinds.or.kr/conversation/internal/llmclient"
+	"bigkinds.or.kr/pkg/chat/v2"
 )
 
 type SummaryService struct {
@@ -45,7 +46,7 @@ func (summaryService *SummaryService) ContentSummary(context context.Context, co
 	}
 	summaryResponse, err := client.CreateChat(context, models[0], summaryMessage, chat.WithModel(models[1]))
 	if err != nil {
-		slog.Error("error : ", err)
+		slog.Error("error : ", "error", err)
 		return nil, err
 	}
 	summaryCallResponse, err := parsingSummaryResponse(summaryResponse)

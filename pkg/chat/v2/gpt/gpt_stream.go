@@ -161,6 +161,7 @@ func (c *GPTStream) Recv(provider string) (*chat.ChatResponse, error) {
 				if err != nil {
 					return nil, err
 				}
+
 				return chatResponse, io.EOF
 			} else {
 				return nil, io.EOF

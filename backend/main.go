@@ -42,7 +42,7 @@ func NewWriter() *kafka.Writer {
 
 	writer.Completion = func(messages []kafka.Message, err error) {
 		if err != nil {
-			slog.Error("failed to write messages:", err)
+			slog.Error("failed to write messages:", "error", err)
 		}
 	}
 

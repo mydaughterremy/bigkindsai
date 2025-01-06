@@ -74,41 +74,47 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
-	qa, err := s.ChatService.LastChatQA(timeoutctx, param.ChatID)
+	qas, err := s.ChatService.ListChatQAsLimit(timeoutctx, param.ChatID, 5)
 	if err != nil {
-		slog.Error("error getting chat qa", "error", err.Error())
+		slog.Error("error getting chat qa at database", "error", err.Error())
+		qas = make([]*model.QA, 0)
 	}
 
 	messages := make([]*model.Message, 0)
 
-	if qa.Answer != "" {
+	for i := 0; i < len(qas); i++ {
+		qa := qas[i]
+		if qa.Answer == "" || qa.Question == "" {
+			continue
+		}
+
 		messages = append(messages, &model.Message{
 			Content: qa.Answer,
 			Role:    "assistant",
 		})
-	}
 
-	if qa.References != nil {
-		b, err := json.Marshal(qa.References)
-		if err != nil {
-			return nil, err
+		if qa.References != nil {
+			b, err := json.Marshal(qa.References)
+			if err != nil {
+				return nil, err
+			}
+
+			functionName := "search"
+
+			messages = append(messages, &model.Message{
+				Content: string(b),
+				Role:    "tool",
+				Name:    functionName,
+			})
 		}
 
-		functionName := "search"
-
-		messages = append(messages, &model.Message{
-			Content: string(b),
-			Role:    "function",
-			Name:    functionName,
-		})
-	}
-
-	if qa.Question != "" {
 		messages = append(messages, &model.Message{
 			Role:    "user",
 			Content: qa.Question,
 		})
 	}
+
+	slices.Reverse(messages)
 
 	messages = append(messages, param.Messages...)
 
@@ -309,8 +315,6 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 	}()
 
 	return completionMultiChannel, nil
-
-	// return s.CreateChatCompletion(ctx, param)
 }
 
 func (s *CompletionService) CreateChatCompletionWithChatHistory(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
