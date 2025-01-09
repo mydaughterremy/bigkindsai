@@ -103,7 +103,7 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 
 			messages = append(messages, &model.Message{
 				Content: string(b),
-				Role:    "tool",
+				Role:    "assistant",
 				Name:    functionName,
 			})
 		}

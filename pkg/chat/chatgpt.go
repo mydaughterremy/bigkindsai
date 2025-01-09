@@ -332,7 +332,7 @@ func (c *ChatGPTStream) Recv() (*proto.ChatResponse, error) {
 		}
 
 		if errors.Is(err, io.EOF) {
-			return nil, errors.New("EOF comes before [DONE]")
+			return nil, errors.New("v1 EOF comes before [DONE]")
 		}
 
 		if !bytes.HasPrefix(resp, []byte(ChatGPTStreamDataStartToken)) {

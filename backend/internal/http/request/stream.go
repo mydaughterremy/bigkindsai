@@ -71,7 +71,7 @@ func (c *SSEStream) Recv() (*model.Completion, error) {
 		resp, err := c.reader.ReadBytes('\n')
 		logrus.Debugf("resp: %s", string(resp))
 		if errors.Is(err, io.EOF) {
-			return nil, errors.New("EOF comes before [DONE]")
+			return nil, errors.New("backend EOF comes before [DONE]")
 		}
 		if err != nil {
 			return nil, err
@@ -89,7 +89,7 @@ func (c *SSEStream) Recv() (*model.Completion, error) {
 			var errresp ErrorResponse
 			err = json.Unmarshal(data, &errresp)
 			if err != nil {
-				return nil, errors.New("failed to unmarshal error response")
+				return nil, errors.New("backend failed to unmarshal error response")
 			}
 
 			return nil, errors.New(errresp.Error)

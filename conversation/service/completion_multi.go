@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -61,6 +60,7 @@ func (s *CompletionMultiService) createKeywordsRelatedQueries(ctx context.Contex
 	keywordsRelatedQueriesMode := os.Getenv("KEYWORDS_RELATED_QUERIES_MODE")
 	switch keywordsRelatedQueriesMode {
 	case "llm":
+		slog.Info("===== ===== ===== createKeywordsRelatedQueries llm")
 		keywordsRelatedQueriesService := &KeywordsRelatedQueriesService{
 			tokenCounter: s.tokenCounter,
 		}
@@ -71,6 +71,7 @@ func (s *CompletionMultiService) createKeywordsRelatedQueries(ctx context.Contex
 		)
 		switch provider {
 		case "upstage":
+			slog.Info("===== ===== ===== GenerateKeywordsRelatedQueriesSolar")
 			keywordsRelatedQueries, tokens, err = keywordsRelatedQueriesService.GenerateKeywordsRelatedQueriesSolar(ctx, modelName, sargs)
 		case "openai":
 			keywordsRelatedQueries, tokens, err = keywordsRelatedQueriesService.GenerateKeywordsRelatedQueriesGpt(ctx, provider, modelName, sargs)
@@ -83,6 +84,8 @@ func (s *CompletionMultiService) createKeywordsRelatedQueries(ctx context.Contex
 			}
 		}
 		concatenatedKeywords := strings.Join(keywordsRelatedQueries.Keywords, " ")
+		slog.Info(concatenatedKeywords)
+		slog.Info(strings.Join(keywordsRelatedQueries.RelatedQueries, " "))
 		ch <- &CreateChatCompletionMultiResult{
 			Completion: &model.Completion{
 				Object:  "chat.completion",
@@ -171,9 +174,9 @@ type CreateChatResponseChoice struct {
 }
 
 type CreateChatResponseChoiceToolCall struct {
-	Id       string `json:"id"`
-	Type     string `json:"type"`
-	Function CreateChatResponseChoiceToolCallFunction
+	Id       string                                   `json:"id"`
+	Type     string                                   `json:"type"`
+	Function CreateChatResponseChoiceToolCallFunction `json:"function"`
 }
 
 type CreateChatResponseChoiceToolCallFunction struct {
@@ -182,9 +185,9 @@ type CreateChatResponseChoiceToolCallFunction struct {
 }
 
 type CreateChatResponseChoiceMessage struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	ToolCalls []CreateChatResponseChoiceToolCall
+	Role      string                             `json:"role"`
+	Content   string                             `json:"content"`
+	ToolCalls []CreateChatResponseChoiceToolCall `json:"tool_calls"`
 }
 
 type CreateChatResponseUsage struct {
@@ -196,16 +199,15 @@ type CreateChatResponseUsage struct {
 func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Context, param *CreateChatCompletionMultiParameter) (chan *CreateChatCompletionMultiResult, error) {
 	// 사용자 메세지 추출
 	slog.Info("===== ===== CreateChatCompletionMultiPrompt")
-
 	payloads := param.Payloads
-	slog.Info("===== ===== payloads")
 	completionId := uuid.New().String()
+	articleProvider := param.Provider
 
-	for i := 0; i < len(payloads); i++ {
-		slog.Info(fmt.Sprintf("===== ===== i: %d", i))
-		slog.Info(payloads[i].Role)
-		slog.Info(payloads[i].Content)
-	}
+	// for i := 0; i < len(payloads); i++ {
+	// 	slog.Info(fmt.Sprintf("===== ===== i: %d", i))
+	// 	slog.Info(payloads[i].Role)
+	// 	slog.Info(payloads[i].Content)
+	// }
 
 	userMessage := s.findLastUserMessage(payloads)
 	// completionId := uuid.New().String()
@@ -225,7 +227,12 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 	var userPayloads []*chat.ChatPayload
 	userPayloads = append(userPayloads, userMessage)
 
-	reqPayloads, err := s.createInitialPayloads(currentTime, userPayloads)
+	reqUserPayloads, err := s.createInitialPayloads(currentTime, userPayloads)
+	if err != nil {
+		return nil, err
+	}
+
+	reqPayloads, err := s.createInitialPayloads(currentTime, payloads)
 	if err != nil {
 		return nil, err
 	}
@@ -256,10 +263,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 	}
 
 	// 사용자 메세지를 바탕으로 function 추출
-
-	slog.Info("===== ===== before go func")
-
-	slog.Info("try to create response", "provider", solarMini.Provider, "model", solarMini.ModelName, "maxFallbackCount", solarMini.MaxFallbackCount)
+	slog.Info("===== ===== Check function... ", "provider", solarMini.Provider, "model", solarMini.ModelName, "maxFallbackCount", solarMini.MaxFallbackCount)
 	predictOpts = append(predictOpts, chat.WithModel(solarMini.ModelName))
 	client, err := llmclient.NewClient(s.client, solarMini.Provider, solarMini.ModelName, 0, chat.WithStreamEnabled)
 	if err != nil {
@@ -268,21 +272,32 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 
 	predictOpts = append(predictOpts, chat.WithNilTollCall)
 	predictOpts = append(predictOpts, chat.WithNilTollChoice)
+
+	// for i := 0; i < len(reqUserPayloads); i++ {
+	// 	slog.Info(fmt.Sprintf("===== ===== i: %d", i))
+	// 	slog.Info(reqUserPayloads[i].Role)
+	// 	slog.Info(reqUserPayloads[i].Content)
+	// }
+
 	// 수정시 볼 곳
-	resp, err := client.CreateChat(ctx, llmProvider, reqPayloads, predictOpts...)
+	resp, err := client.CreateChat(ctx, llmProvider, reqUserPayloads, predictOpts...)
 	if err != nil {
-		log.Fatal(err)
+		// log.Fatal(err)
+		slog.Info("===== ===== CreateChat error")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		slog.Info("===== ===== io.ReadAll(resp.Body) error")
+		return nil, err
 	}
-	bodyString := string(bodyBytes)
+	// bodyString := string(bodyBytes)
+	// fmt.Println(bodyString)
 	// data := strings.Split(bodyString, "data:")
-
-	slog.Info(bodyString)
+	// slog.Info("===== ===== fmt.Println bodybytes")
+	// slog.Info(bodyString)
 
 	var chatResponse CreateChatResponse
 	keyIndex := 0
@@ -291,8 +306,17 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 		return nil, err
 	}
 
-	isToolCalls := chatResponse.Choices[0].Message.ToolCalls
-	completionMultiResultChannel := make(chan *CreateChatCompletionMultiResult, 10)
+	isToolCalls := len(chatResponse.Choices[0].Message.ToolCalls)
+	// slog.Info("===== ===== ")
+	// slog.Info(chatResponse.Choices[0].Message.Role)
+	// slog.Info(chatResponse.Choices[0].Message.Content)
+	// slog.Info(chatResponse.Choices[0].FinishReason)
+	// slog.Info(chatResponse.Choices[0].Message.ToolCalls[0].Type)
+	// slog.Info(chatResponse.Choices[0].Message.ToolCalls[0].Function.Name)
+	// slog.Info(chatResponse.Choices[0].Message.ToolCalls[0].Function.Arguments)
+	// slog.Info("===== ===== ")
+
+	completionMultiResultChannel := make(chan *CreateChatCompletionMultiResult, 20)
 
 	// 답변 생성은 sloar pro
 	// function이 있는 없는 경우 처리
@@ -302,6 +326,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 	}
 
 	references := make([]model.Reference, 0)
+	// var streamError error
 
 	go func() {
 		defer close(completionMultiResultChannel)
@@ -318,7 +343,8 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 			},
 		}
 
-		slog.Info("try to create response", "provider", solarPro.Provider, "model", solarPro.ModelName)
+		slog.Info("===== ===== try to create response", "provider", solarPro.Provider, "model", solarPro.ModelName)
+		// with Stream default
 		predictOpts = setPredictOpts()
 		predictOpts = append(predictOpts, chat.WithModel(solarPro.ModelName))
 
@@ -338,12 +364,12 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 		}
 
 		// functnion이 있는 경우 처리
-		if isToolCalls != nil {
+		if isToolCalls > 0 {
 			callResponse := &gpt.ChatCompletionFunctionCallResp{
 				Name:      chatResponse.Choices[0].Message.ToolCalls[0].Function.Name,
 				Arguments: chatResponse.Choices[0].Message.ToolCalls[0].Function.Arguments,
 			}
-			slog.Info("is tool_calls", "name", callResponse.Name, "arguments", callResponse.Arguments)
+			slog.Info("===== ===== is tool_calls", "name", callResponse.Name, "arguments", callResponse.Arguments)
 			callResponse.Arguments, err = convertArgumentsToUTF8IfNot(callResponse.Arguments, userMessage.Content)
 			if err != nil {
 				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
@@ -354,7 +380,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 
 			extraArgs := &function.ExtraArgs{
 				RawQuery:       userMessage.Content,
-				Provider:       llmProvider,
+				Provider:       articleProvider,
 				Topk:           15,
 				MaxChunkSize:   1000,
 				MaxChunkNumber: 5,
@@ -368,9 +394,8 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 				return
 			}
 
-			slog.Info("try to generate keywords and relatedQueries", "provider", llmProvider, "model", solarPro.ModelName)
+			slog.Info("===== ===== try to generate keywords and relatedQueries", "provider", llmProvider, "model", solarPro.ModelName)
 			var keywordsRelatedQueriesWg sync.WaitGroup
-			defer keywordsRelatedQueriesWg.Wait()
 
 			if callResponse.Name == "search" {
 				keywordsRelatedQueriesWg.Add(1)
@@ -380,15 +405,19 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 				}()
 			}
 
-			functionCallMsg := &chat.ChatPayload{
-				Role: "assistant",
-				FunctionCall: &chat.ChatFunction{
-					Name:      callResponse.Name,
-					Arguments: callResponse.Arguments,
-				},
-			}
+			keywordsRelatedQueriesWg.Wait()
+
+			// functionCallMsg := &chat.ChatPayload{
+			// 	Role: "assistant",
+			// 	FunctionCall: &chat.ChatFunction{
+			// 		Name:      callResponse.Name,
+			// 		Arguments: callResponse.Arguments,
+			// 	},
+			// }
 
 			callFunctionContent := string(callFunctionResponse)
+			// slog.Info("callFunctionContent")
+			// slog.Info(callFunctionContent)
 			switch callResponse.Name {
 			case "search":
 				var items struct {
@@ -407,7 +436,11 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					contentRemovedReference[i].Attributes.Content = ""
 				}
 
-				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+				// for _, r := range contentRemovedReference {
+				// 	slog.Info(r.Attributes.NewsID)
+				// }
+
+				completionMultiResultChannel <- &CreateChatCompletionMultiResult{ // should not be accumulated
 					Completion: &model.Completion{
 						Object:  "chat.completion",
 						Id:      completionId,
@@ -425,7 +458,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					PublishedAt time.Time `json:"published_at"`
 					Provider    string    `json:"provider"`
 					Byline      string    `json:"byline"`
-					Content     string    `json:"content,omiteempty"`
+					Content     string    `json:"content,omitempty"`
 					Index       int       `json:"index"`
 				}, len(references))
 
@@ -437,7 +470,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					tmpItems[i].Index = 1 + i
 				}
 
-				rawRefsWithImtesIdCleared, err := json.Marshal(tmpItems)
+				rawRefsWithItemsIdCleared, err := json.Marshal(tmpItems)
 				if err != nil {
 					completionMultiResultChannel <- &CreateChatCompletionMultiResult{
 						Error: err,
@@ -445,18 +478,51 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					return
 				}
 
+				callFunctionContent = string(rawRefsWithItemsIdCleared)
+
 			}
 
-		} else {
-			slog.Info("is not tool_calls")
-			// return nil, fmt.Errorf("not finished")
+			role := ""
+			switch llmProvider {
+			case "openai":
+				role = "function"
+			case "upstage":
+				role = "assistant"
+			}
 
-			// CreateChatStream
+			// payloads = append(reqPayloads, functionCallMsg, &chat.ChatPayload{
+			// 	Content: callFunctionContent,
+			// 	Role:    role,
+			// 	Name:    &callResponse.Name,
+			// })
+
+			payloads = append(reqPayloads, &chat.ChatPayload{
+				Content: callFunctionContent,
+				Role:    role,
+				Name:    &callResponse.Name,
+			})
+
+			if payloads[0].Role == "system" {
+				payloads[0] = &chat.ChatPayload{
+					Role:    "system",
+					Content: s.PromptService.GetAfterFunctionCallPrompt(currentTime.Time.Format("2006-01-02T15:03:05-07:00")),
+				}
+			} else {
+				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+					Error: errors.New("first payload should be system"),
+				}
+				return
+			}
+
 			predictOpts = append(predictOpts, chat.WithNilTollCall)
 			predictOpts = append(predictOpts, chat.WithNilTollChoice)
+			predictOpts = append(predictOpts, chat.WithNoFunctions)
 
-			stream, err := client.CreateChatStream(ctx, llmProvider, reqPayloads, predictOpts...)
+			slog.Info("===== ===== before CreateChatStream")
+
+			stream, err := client.CreateChatStream(ctx, llmProvider, payloads, predictOpts...)
 			if err != nil {
+				slog.Info("===== ===== CreateChatStream error")
 				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
 					Error: err,
 				}
@@ -465,7 +531,76 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 			defer func(stream gpt.ChatStream) {
 				err := stream.Close()
 				if err != nil {
-					slog.Error("failed to close stream", "error", err)
+					slog.Error("===== ===== failed to close stream", "error", err)
+				}
+			}(stream)
+
+			done := false
+
+			for {
+				if done {
+					break
+				}
+
+				select {
+				case <-ctx.Done():
+					completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+						Error: ctx.Err(),
+					}
+					return
+				default:
+					resp, err := stream.Recv(llmProvider)
+					if err != nil && err != io.EOF {
+						completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+							Error: err,
+						}
+						return
+					}
+					if err == io.EOF {
+						done = true
+						completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+							Done: true,
+						}
+						break
+					}
+
+					completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+						Completion: &model.Completion{
+							Object:  "chat.completion",
+							Id:      completionId,
+							Created: int(time.Now().Unix()),
+							Delta: model.CompletionDelta{
+								Content: resp.Payload.Content,
+							},
+							TokenUsage: s.tokenCounter.CountTokens(resp.Payload.Content),
+						},
+					}
+
+				}
+			}
+
+			// keywordsRelatedQueriesWg.Wait()
+
+		} else {
+			slog.Info("===== ===== is not tool_calls")
+			// return nil, fmt.Errorf("not finished")
+
+			// CreateChatStream
+			predictOpts = append(predictOpts, chat.WithNilTollCall)
+			predictOpts = append(predictOpts, chat.WithNilTollChoice)
+
+			stream, err := client.CreateChatStream(ctx, llmProvider, reqUserPayloads, predictOpts...)
+			if err != nil {
+				slog.Info("===== ===== CreateChatStream error")
+				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+					Error: err,
+				}
+				return
+			}
+			defer func(stream gpt.ChatStream) {
+				err := stream.Close()
+				if err != nil {
+					slog.Error("===== ===== failed to close stream", "error", err)
 				}
 			}(stream)
 
@@ -491,6 +626,9 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					}
 					if err == io.EOF {
 						done = true
+						completionMultiResultChannel <- &CreateChatCompletionMultiResult{
+							Done: true,
+						}
 						break
 					}
 

@@ -360,6 +360,7 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 
 			completionLLM, err = GetCompletionLLM(modelIndex)
 			if err != nil {
+				slog.Info("GetCompletionLLM error")
 				completionResultChannel <- &CreateChatCompletionResult{
 					Error: err,
 				}
@@ -402,6 +403,7 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 				// 수정시 볼 곳
 				stream, err := client.CreateChatStream(context, completionLLM.Provider, payloads, predictOpts...)
 				if err != nil {
+					slog.Info("CreateChatStream error")
 					loopError = err
 					break
 				}
@@ -615,6 +617,7 @@ func (s *CompletionService) CreateChatCompletion(context context.Context, param 
 						}
 						payloadContent = string(rawRefsWithItemsIdCleared)
 					}
+
 					role := ""
 					switch completionLLM.Provider {
 					case "openai":

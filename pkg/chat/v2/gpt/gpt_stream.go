@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"bigkinds.or.kr/pkg/chat/v2"
@@ -41,18 +42,24 @@ func (c *GPT) CreateChatStream(ctx context.Context, provider string, messages []
 	}
 
 	if err != nil {
+		slog.Info("CreateRequest error...")
 		return nil, err
 	}
-
+	slog.Info("===== ===== ===== before c.Client.DO")
 	resp, err := c.Client.Do(req)
+	// slog.Info(fmt.Sprintf("%d\n", resp.StatusCode))
 	if err != nil {
+		slog.Info("===== ===== ===== error resp, err := c.Client.Do(req)")
 		return nil, err
 	}
 
 	if resp.StatusCode >= 300 {
+		slog.Info("===== ===== ===== resp.StatusCode >= 300")
 		body, err := io.ReadAll(resp.Body)
 		defer resp.Body.Close()
 		if err != nil {
+			slog.Info("===== ===== ===== io.ReadAll(resp.Body) error")
+			// slog.Info(string(body))
 			return nil, err
 		}
 		return nil, fmt.Errorf("response status code is not in 200-299, status code: %d, body: %s", resp.StatusCode, string(body))
@@ -124,14 +131,14 @@ func (c *GPTStream) Recv(provider string) (*chat.ChatResponse, error) {
 
 	for {
 		resp, err := c.reader.ReadBytes('\n')
-		logrus.Debugf("resp: %s", string(resp))
+		// slog.Info(string(resp))
 
 		if provider != "upstage" {
 			if errors.Is(err, io.EOF) {
 				if isError {
 					return nil, errors.New(errorRawMessage)
 				}
-				return nil, errors.New("EOF comes before [DONE]")
+				return nil, errors.New("v2 EOF comes before [DONE]")
 			}
 			if err != nil {
 				return nil, err
@@ -156,6 +163,7 @@ func (c *GPTStream) Recv(provider string) (*chat.ChatResponse, error) {
 		}
 
 		if bytes.Equal(data, []byte(ChatGPTStreamDoneToken)) {
+			slog.Info("===== ===== ===== got [DONE]")
 			if shouldbeMerged { // if shouldbeMerged is true, stream would be continued and this return value is a delta value from start to now
 				chatResponse, err := c.merged.ChatResponse()
 				if err != nil {

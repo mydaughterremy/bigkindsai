@@ -212,8 +212,11 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 	}
 
 	var solarMessages []ChatCompletionMessage
-
+	// slog.Info("===== ===== ===== ===== =====")
 	for _, chatPayload := range messages {
+
+		// slog.Info(chatPayload.Role)
+		// slog.Info(chatPayload.Content)
 
 		message := ChatCompletionMessage{
 			Role:    chatPayload.Role,
@@ -249,6 +252,7 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 		solarMessages = append(solarMessages, message)
 
 	}
+	// slog.Info("===== ===== ===== ===== =====")
 
 	if options.Functions != nil {
 		tools = make([]*json.RawMessage, len(options.Functions))
@@ -267,7 +271,6 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 		}
 		rawFunctionCall = json.RawMessage(*options.FunctionCall)
 	}
-
 
 	if options.ToolChoice != nil {
 		// json.RawMessage should be wrapped with double quotes or braces
