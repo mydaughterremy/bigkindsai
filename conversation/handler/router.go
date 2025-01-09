@@ -51,7 +51,10 @@ func NewRouter() chi.Router {
 	}
 
 	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"http://192.168.0.101:5500"},
+		AllowedOrigins: []string{
+			"http://192.168.0.101:3000",
+			"http://gnew-biz.tplinkdns.com:53000",
+		},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},
 		AllowedHeaders: []string{"Content-Type"}})
 
