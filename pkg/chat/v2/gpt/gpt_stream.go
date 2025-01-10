@@ -21,6 +21,56 @@ type ChatStream interface {
 	Close() error
 }
 
+func (c *GPT) CreateMultiturnChatStream(ctx context.Context, provider string, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (ChatStream, error) {
+
+	options := chat.NewGptPredictionOptions(opts...)
+
+	if !c.Option.Streamable {
+		return nil, fmt.Errorf("model %s cannot stream", options.Model)
+	}
+
+	var (
+		req *http.Request
+		err error
+	)
+
+	switch provider {
+	case "upstage":
+		req, err = c.CreateRequestSolar(ctx, messages, *options)
+	case "openai":
+		req, err = c.CreateRequest(ctx, messages, *options)
+	}
+
+	if err != nil {
+		slog.Info("CreateRequest error...")
+		return nil, err
+	}
+	slog.Info("===== ===== ===== before c.Client.DO")
+	resp, err := c.Client.Do(req)
+	// slog.Info(fmt.Sprintf("%d\n", resp.StatusCode))
+	if err != nil {
+		slog.Info("===== ===== ===== error resp, err := c.Client.Do(req)")
+		return nil, err
+	}
+
+	if resp.StatusCode >= 300 {
+		slog.Info("===== ===== ===== resp.StatusCode >= 300")
+		body, err := io.ReadAll(resp.Body)
+		defer resp.Body.Close()
+		if err != nil {
+			slog.Info("===== ===== ===== io.ReadAll(resp.Body) error")
+			// slog.Info(string(body))
+			return nil, err
+		}
+		return nil, fmt.Errorf("response status code is not in 200-299, status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return &GPTStream{
+		reader: bufio.NewReader(resp.Body),
+		body:   resp.Body,
+	}, nil
+}
+
 func (c *GPT) CreateChatStream(ctx context.Context, provider string, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (ChatStream, error) {
 
 	options := chat.NewGptPredictionOptions(opts...)
@@ -70,6 +120,7 @@ func (c *GPT) CreateChatStream(ctx context.Context, provider string, messages []
 		body:   resp.Body,
 	}, nil
 }
+
 func (c *GPT) CreateChat(ctx context.Context, provider string, messages []*chat.ChatPayload, opts ...func(o *chat.GptPredictionOptions)) (*http.Response, error) {
 	options := chat.NewGptPredictionOptions(opts...)
 

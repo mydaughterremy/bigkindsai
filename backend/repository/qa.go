@@ -66,7 +66,7 @@ func (s *QARepository) ListChatIdQAs(ctx context.Context, chatID string) ([]*mod
 
 func (s *QARepository) ListChatIdQAsLimit(ctx context.Context, chatID string, limit int) ([]*model.QA, error) {
 	var qas []*model.QA
-	if err := s.DB.WithContext(ctx).Where("chat_id = ? AND answer != ''", chatID).Order("created_at desc").Limit(limit).Find(&qas).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Where("chat_id = ? AND answer != '' AND question != ''", chatID).Order("created_at desc").Limit(limit).Find(&qas).Error; err != nil {
 		return nil, err
 	}
 	return qas, nil

@@ -93,20 +93,20 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 			Role:    "assistant",
 		})
 
-		if qa.References != nil {
-			b, err := json.Marshal(qa.References)
-			if err != nil {
-				return nil, err
-			}
+		// if qa.References != nil {
+		// 	b, err := json.Marshal(qa.References)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
 
-			functionName := "search"
+		// 	functionName := "search"
 
-			messages = append(messages, &model.Message{
-				Content: string(b),
-				Role:    "assistant",
-				Name:    functionName,
-			})
-		}
+		// 	messages = append(messages, &model.Message{
+		// 		Content: string(b),
+		// 		Role:    "assistant",
+		// 		Name:    functionName,
+		// 	})
+		// }
 
 		messages = append(messages, &model.Message{
 			Role:    "user",
@@ -114,9 +114,14 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 		})
 	}
 
-	slices.Reverse(messages)
+	// slices.Reverse(messages)
 
 	messages = append(messages, param.Messages...)
+
+	// for i, m := range messages {
+	// 	slog.Info(string(i))
+	// 	slog.Info("message", "role", m.Role, "content", m.Content)
+	// }
 
 	qaId := uuid.New().String()
 	chatId := param.ChatID

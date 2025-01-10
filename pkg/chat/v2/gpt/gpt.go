@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -193,6 +194,73 @@ func (g *GPT) CreateRequest(ctx context.Context, messages []*chat.ChatPayload, o
 	return req, nil
 }
 
+// solar-pro request
+func (c *GPT) CreateRequestSolarPro(ctx context.Context, messages []*chat.ChatPayload, llmModel string, options chat.GptPredictionOptions) (*http.Request, error) {
+	if len(messages) == 0 {
+		return nil, errors.New("messages is required")
+	}
+
+	if options.Model == "" {
+		return nil, errors.New("model is required")
+	}
+
+	var solarMessages []ChatCompletionMessage
+	// slog.Info("===== ===== ===== ===== =====")
+	for _, chatPayload := range messages {
+
+		// slog.Info(chatPayload.Role)
+		// slog.Info(chatPayload.Content)
+
+		message := ChatCompletionMessage{
+			Role:    chatPayload.Role,
+			Content: chatPayload.Content,
+		}
+
+		solarMessages = append(solarMessages, message)
+
+	}
+	// slog.Info("===== ===== ===== ===== =====")
+
+	sm_json, err := json.Marshal(solarMessages)
+	if err != nil {
+		logrus.Errorf("error marshalling solarMessage: %s", err)
+	}
+	slog.Info(string(sm_json))
+
+	solarQuery := ChatCompletion{
+		Model:            llmModel,
+		Messages:         solarMessages,
+		Temperature:      options.Temperature,
+		TopP:             options.TopP,
+		MaxTokens:        options.MaxTokens,
+		PresencePenalty:  options.PresencePenalty,
+		FrequencyPenalty: options.FrequencyPenalty,
+		Stream:           options.Stream,
+		Seed:             options.Seed,
+	}
+
+	queryBytes, err := json.Marshal(solarQuery)
+	if err != nil {
+		logrus.Errorf("error marshalling gpt query: %s", err)
+		return nil, err
+	}
+
+	// send request to openai
+	targetUrl := c.Option.Endpoint
+
+	req, err := http.NewRequestWithContext(ctx, "POST", targetUrl, bytes.NewReader(queryBytes))
+	if err != nil {
+		logrus.Errorf("error creating request: %s", err)
+		return nil, err
+	}
+	if c.Option.ApiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Option.ApiKey))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	chat.AddForwardHeadersFromIncomingContext(&ctx, &req.Header)
+	return req, nil
+}
+
 // Solar request
 func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPayload, options chat.GptPredictionOptions) (*http.Request, error) {
 	var (
@@ -289,6 +357,12 @@ func (c *GPT) CreateRequestSolar(ctx context.Context, messages []*chat.ChatPaylo
 		}
 		rawResponseFormat = json.RawMessage(*options.ResponseFormat)
 	}
+
+	sm_json, err := json.Marshal(solarMessages)
+	if err != nil {
+		logrus.Errorf("error marshalling solarMessage: %s", err)
+	}
+	slog.Info(string(sm_json))
 
 	solarQuery := ChatCompletion{
 		Model:            options.Model,

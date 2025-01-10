@@ -9,6 +9,23 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type SolarChatCompletion struct {
+	Model            string             `json:"model"`
+	Messages         string             `json:"messages"`
+	Functions        []*json.RawMessage `json:"functions,omitempty"`
+	FunctionCall     json.RawMessage    `json:"function_call,omitempty"`
+	Tools            []*json.RawMessage `json:"tools,omitempty"`
+	ToolChoice       json.RawMessage    `json:"tool_choice,omitempty"`
+	Temperature      *float32           `json:"temperature,omitempty"`
+	TopP             *float32           `json:"top_p,omitempty"`
+	MaxTokens        *int32             `json:"max_tokens,omitempty"`
+	PresencePenalty  *float32           `json:"presence_penalty,omitempty"`
+	FrequencyPenalty *float32           `json:"frequency_penalty,omitempty"`
+	ResponseFormat   json.RawMessage    `json:"response_format,omitempty"`
+	Stream           bool               `json:"stream,omitempty"`
+	Seed             *int64             `json:"seed,omitempty"`
+}
+
 // request
 type ChatCompletion struct {
 	Model            string                  `json:"model"`

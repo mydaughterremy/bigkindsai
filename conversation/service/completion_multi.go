@@ -149,14 +149,14 @@ func (s *CompletionMultiService) findLastUserMessage(payloads []*chat.ChatPayloa
 	return nil
 }
 
-// func (s *CompletionMultiService) findHistoryUserMessage(payloads []*chat.ChatPayload) []*chat.ChatPayload {
-// 	res := []*chat.ChatPayload{}
-// 	for i := 0; i < len(payloads)-1; i++ {
-// 		res = append(res, payloads[i])
-// 	}
+func (s *CompletionMultiService) findHistoryUserMessage(payloads []*chat.ChatPayload) []*chat.ChatPayload {
+	res := []*chat.ChatPayload{}
+	for i := 0; i < len(payloads)-1; i++ {
+		res = append(res, payloads[i])
+	}
 
-// 	return res
-// }
+	return res
+}
 
 type CreateChatResponse struct {
 	Id      string `json:"id"`
@@ -226,13 +226,9 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 	// system prompt를 추가
 	var userPayloads []*chat.ChatPayload
 	userPayloads = append(userPayloads, userMessage)
+	historyPayloads := s.findHistoryUserMessage(payloads)
 
 	reqUserPayloads, err := s.createInitialPayloads(currentTime, userPayloads)
-	if err != nil {
-		return nil, err
-	}
-
-	reqPayloads, err := s.createInitialPayloads(currentTime, payloads)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +411,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 			// 	},
 			// }
 
-			callFunctionContent := string(callFunctionResponse)
+			var referenceContent string
 			// slog.Info("callFunctionContent")
 			// slog.Info(callFunctionContent)
 			switch callResponse.Name {
@@ -467,6 +463,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					tmpItems[i].PublishedAt = reference.Attributes.PublishedAt
 					tmpItems[i].Provider = reference.Attributes.Provider
 					tmpItems[i].Byline = reference.Attributes.Byline
+					tmpItems[i].Content = reference.Attributes.Content
 					tmpItems[i].Index = 1 + i
 				}
 
@@ -478,41 +475,17 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 					return
 				}
 
-				callFunctionContent = string(rawRefsWithItemsIdCleared)
+				referenceContent = string(rawRefsWithItemsIdCleared)
 
 			}
-
-			role := ""
-			switch llmProvider {
-			case "openai":
-				role = "function"
-			case "upstage":
-				role = "assistant"
+			var systemPayloads []*chat.ChatPayload
+			systemPayload := &chat.ChatPayload{
+				Role:    "system",
+				Content: s.PromptService.GetSolarProPrompt(currentTime.Time.Format("2006-01-02T15:03:05-07:00"), referenceContent),
 			}
-
-			// payloads = append(reqPayloads, functionCallMsg, &chat.ChatPayload{
-			// 	Content: callFunctionContent,
-			// 	Role:    role,
-			// 	Name:    &callResponse.Name,
-			// })
-
-			payloads = append(reqPayloads, &chat.ChatPayload{
-				Content: callFunctionContent,
-				Role:    role,
-				Name:    &callResponse.Name,
-			})
-
-			if payloads[0].Role == "system" {
-				payloads[0] = &chat.ChatPayload{
-					Role:    "system",
-					Content: s.PromptService.GetAfterFunctionCallPrompt(currentTime.Time.Format("2006-01-02T15:03:05-07:00")),
-				}
-			} else {
-				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
-					Error: errors.New("first payload should be system"),
-				}
-				return
-			}
+			systemPayloads = append(systemPayloads, systemPayload)
+			systemPayloads = append(systemPayloads, historyPayloads...)
+			systemPayloads = append(systemPayloads, userMessage)
 
 			predictOpts = append(predictOpts, chat.WithNilTollCall)
 			predictOpts = append(predictOpts, chat.WithNilTollChoice)
@@ -520,7 +493,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 
 			slog.Info("===== ===== before CreateChatStream")
 
-			stream, err := client.CreateChatStream(ctx, llmProvider, payloads, predictOpts...)
+			stream, err := client.CreateMultiturnChatStream(ctx, llmProvider, systemPayloads, predictOpts...)
 			if err != nil {
 				slog.Info("===== ===== CreateChatStream error")
 				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
@@ -586,10 +559,21 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 			// return nil, fmt.Errorf("not finished")
 
 			// CreateChatStream
+
+			var systemPayloads []*chat.ChatPayload
+			systemPayload := &chat.ChatPayload{
+				Role:    "system",
+				Content: s.PromptService.GetSolarProPromptwithoutReference(currentTime.Time.Format("2006-01-02T15:03:05-07:00")),
+			}
+			systemPayloads = append(systemPayloads, systemPayload)
+			systemPayloads = append(systemPayloads, historyPayloads...)
+			systemPayloads = append(systemPayloads, userMessage)
+
 			predictOpts = append(predictOpts, chat.WithNilTollCall)
 			predictOpts = append(predictOpts, chat.WithNilTollChoice)
+			predictOpts = append(predictOpts, chat.WithNoFunctions)
 
-			stream, err := client.CreateChatStream(ctx, llmProvider, reqUserPayloads, predictOpts...)
+			stream, err := client.CreateChatStream(ctx, llmProvider, systemPayloads, predictOpts...)
 			if err != nil {
 				slog.Info("===== ===== CreateChatStream error")
 				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
