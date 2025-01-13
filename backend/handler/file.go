@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,19 +16,158 @@ import (
 )
 
 type FileHandler struct {
-	service   *service.FileService
-	UploadDir string
-	MaxSize   int64 // maximum file size in bytes
-	MaxNum    int64
+	FileService *service.FileService
+	UploadDir   string
+	MaxSize     int64 // maximum file size in bytes
+	MaxNum      int64
 }
 
 type MultipleFileResponse struct {
-	fileIds []string
+	UploadId    string       `json:"upload_id"`
+	UploadFiles []UploadFile `json:"file_ids"`
+}
+
+type FileResponse struct {
+	FileId string `json:"file_id"`
+}
+
+type DocParserResponse struct {
+	Content DocParserResponseContent `json:"content"`
+	Usages  DocParserResponseUsage   `json:"usage"`
+}
+
+type DocParserResponseContent struct {
+	Text string `json:"text"`
+}
+
+type DocParserResponseUsage struct {
+	Pages int `json:"pages"`
+}
+
+type DocParserResult struct {
+	UploadId string `json:"upload_id"`
+	FileId   string `json:"file_id"`
+	Content  string `json:"content"`
+	Usage    int    `json:"usage"`
+}
+
+type UploadFile struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+}
+
+func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(f.MaxSize)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+	defer file.Close()
+
+	apiKey := "up_cyM2Ajc0N3iYvaDIAIS4XtOaElBfC"
+	url := "https://api.upstage.ai/v1/document-ai/document-parse"
+
+	var reqBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&reqBody)
+
+	err = multipartWriter.WriteField("ocr", "auto")
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	err = multipartWriter.WriteField("output_formats", `["text"]`)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	err = multipartWriter.WriteField("model", "document-parse")
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	formFile, err := multipartWriter.CreateFormFile("document", handler.Filename)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	_, err = io.Copy(formFile, file)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	multipartWriter.Close()
+
+	req, err := http.NewRequest("POST", url, &reqBody)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	var docResp DocParserResponse
+	err = json.Unmarshal(respBytes, &docResp)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	uploadId := uuid.New().String()
+	fileId := uuid.New().String()
+	docRes := &DocParserResult{
+		UploadId: uploadId,
+		FileId:   fileId,
+		Content:  docResp.Content.Text,
+		Usage:    docResp.Usages.Pages,
+	}
+	filepath := filepath.Join(f.UploadDir, fileId)
+	dst, err := os.Create(filepath)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+	defer dst.Close()
+
+	if _, err := dst.Write([]byte(docResp.Content.Text)); err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, docRes)
+
 }
 
 func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request) {
+	apiKey := "up_cyM2Ajc0N3iYvaDIAIS4XtOaElBfC"
+	url := "https://api.upstage.ai/v1/document-ai/document-parse"
 	maxCap := f.MaxNum * f.MaxSize
 	r.Body = http.MaxBytesReader(w, r.Body, maxCap)
+
+	fmt.Println("maxCap", string(int(maxCap)))
 
 	err := r.ParseMultipartForm(maxCap)
 	if err != nil {
@@ -39,26 +181,97 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	uploadedFiles := []string{}
+	uploadedFiles := []UploadFile{}
 
 	for _, fileHeader := range files {
-		filename := uuid.New().String()
-		filepath := filepath.Join(f.UploadDir, filename)
+		fmt.Println("Filename: " + fileHeader.Filename)
+		fileId := uuid.New().String()
+		filepath := filepath.Join(f.UploadDir, fileId)
 		src, err := fileHeader.Open()
 		if err != nil {
 			continue
 		}
 		defer src.Close()
 
+		var reqBody bytes.Buffer
+		multipartWriter := multipart.NewWriter(&reqBody)
+
+		err = multipartWriter.WriteField("ocr", "auto")
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		err = multipartWriter.WriteField("output_formats", `["text"]`)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		err = multipartWriter.WriteField("model", "document-parse")
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		formFile, err := multipartWriter.CreateFormFile("document", fileHeader.Filename)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		_, err = io.Copy(formFile, src)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		multipartWriter.Close()
+
+		req, err := http.NewRequest("POST", url, &reqBody)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		var docResp DocParserResponse
+		err = json.Unmarshal(respBytes, &docResp)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
 		dst, err := os.Create(filepath)
 		if err != nil {
-			continue
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
 		}
 		defer dst.Close()
-		if _, err := io.Copy(dst, src); err != nil {
-			continue
+		if _, err := dst.Write([]byte(docResp.Content.Text)); err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
 		}
-		uploadedFiles = append(uploadedFiles, filename)
+		uploadedFiles = append(uploadedFiles, UploadFile{
+			ID:       fileId,
+			Filename: fileHeader.Filename,
+		})
 
 	}
 
@@ -67,8 +280,18 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_ = response.WriteJsonResponse(w, r, http.StatusOK, &MultipleFileResponse{
-		fileIds: uploadedFiles,
-	})
+	uploadId := uuid.New().String()
+
+	multipleFileResponse := &MultipleFileResponse{
+		UploadId:    uploadId,
+		UploadFiles: uploadedFiles,
+	}
+
+	err = f.FileService.WriteUploadFiles(multipleFileResponse)
+	if err != nil {
+		// file delete
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, multipleFileResponse)
 
 }

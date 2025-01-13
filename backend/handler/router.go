@@ -60,10 +60,10 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	}
 
 	fileHandler := &FileHandler{
-		UploadDir: "./upload",
-		MaxSize:   3*10 ^ 7,
-		MaxNum:    5,
-		service:   fileService,
+		UploadDir:   "./upload",
+		MaxSize:     int64(30 * 1024 * 1024 * 1024),
+		MaxNum:      int64(5),
+		FileService: fileService,
 	}
 
 	chatHandler := &ChatHandler{
@@ -173,6 +173,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 		router.Route("/file", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
+			router.Post("/upload", fileHandler.FileUpload)
 			router.Post("/upload-multiple", fileHandler.MultipleFileUpload)
 		})
 	})
