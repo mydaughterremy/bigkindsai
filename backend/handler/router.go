@@ -24,12 +24,16 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 	router := chi.NewRouter()
 	authenticator := auth.Authenticator{
-		AuthService: &service.AuthService{},
+		AuthService: service.NewAuthService(),
 	}
 
+	chatRepository := repository.NewChatRepository(db)
+	qARepository := repository.NewQARepository(db, koreanStandardTime)
+	fileRepository := repository.NewFileRepository(db)
+
 	chatService := &service.ChatService{
-		ChatRepository: repository.NewChatRepository(db),
-		QARepository:   repository.NewQARepository(db, koreanStandardTime),
+		ChatRepository: chatRepository,
+		QARepository:   qARepository,
 	}
 
 	questionGuidesService := &service.QuestionGuidesService{}
@@ -54,16 +58,15 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		panic(err)
 	}
 
-	fileService, err := service.NewFileService()
-	if err != nil {
-		panic(err)
-	}
-
 	fileHandler := &FileHandler{
-		UploadDir:   "./upload",
-		MaxSize:     int64(30 * 1024 * 1024 * 1024),
-		MaxNum:      int64(5),
-		FileService: fileService,
+		UploadDir: "./upload",
+		MaxSize:   int64(30 * 1024 * 1024 * 1024),
+		MaxNum:    int64(5),
+		FileService: &service.FileService{
+			FileRepository: fileRepository,
+			QARepository:   qARepository,
+		},
+		ChatService: chatService,
 	}
 
 	chatHandler := &ChatHandler{
@@ -72,13 +75,13 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 	statisticsHandler := &StatisticsHandler{
 		StatisticsService: &service.StatisticsService{
-			Repository: repository.NewQARepository(db, koreanStandardTime),
+			Repository: qARepository,
 		},
 	}
 
 	qaHandler := &qaHandler{
 		service: &service.QAService{
-			Repository: repository.NewQARepository(db, koreanStandardTime),
+			Repository: qARepository,
 		},
 	}
 
@@ -174,7 +177,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		router.Route("/file", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
 			router.Post("/upload", fileHandler.FileUpload)
-			router.Post("/upload-multiple", fileHandler.MultipleFileUpload)
+			router.Post("/upload-multiple/{chat_id}", fileHandler.MultipleFileUpload)
 		})
 	})
 

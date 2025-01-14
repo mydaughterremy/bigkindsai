@@ -11,20 +11,19 @@ import (
 	"path/filepath"
 
 	"bigkinds.or.kr/backend/internal/http/response"
+	"bigkinds.or.kr/backend/model"
 	"bigkinds.or.kr/backend/service"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type FileHandler struct {
 	FileService *service.FileService
-	UploadDir   string
-	MaxSize     int64 // maximum file size in bytes
-	MaxNum      int64
-}
+	ChatService *service.ChatService
 
-type MultipleFileResponse struct {
-	UploadId    string       `json:"upload_id"`
-	UploadFiles []UploadFile `json:"file_ids"`
+	UploadDir string
+	MaxSize   int64 // maximum file size in bytes
+	MaxNum    int64
 }
 
 type FileResponse struct {
@@ -49,11 +48,6 @@ type DocParserResult struct {
 	FileId   string `json:"file_id"`
 	Content  string `json:"content"`
 	Usage    int    `json:"usage"`
-}
-
-type UploadFile struct {
-	ID       string `json:"id"`
-	Filename string `json:"filename"`
 }
 
 func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +156,19 @@ func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var fileNames []string
+	chatId := chi.URLParam(r, "chat_id")
+	if chatId == "" {
+		// chatId = uuid.New().String()
+		chat, err := f.ChatService.CreateChat(ctx, "")
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		chatId = chat.ID.String()
+	}
+
 	apiKey := "up_cyM2Ajc0N3iYvaDIAIS4XtOaElBfC"
 	url := "https://api.upstage.ai/v1/document-ai/document-parse"
 	maxCap := f.MaxNum * f.MaxSize
@@ -181,8 +188,8 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	uploadedFiles := []UploadFile{}
-
+	uploadedFiles := []model.UploadFile{}
+	var totalPages int
 	for _, fileHeader := range files {
 		fmt.Println("Filename: " + fileHeader.Filename)
 		fileId := uuid.New().String()
@@ -258,6 +265,8 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		totalPages += docResp.Usages.Pages
+
 		dst, err := os.Create(filepath)
 		if err != nil {
 			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
@@ -268,10 +277,12 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		uploadedFiles = append(uploadedFiles, UploadFile{
+		uploadedFiles = append(uploadedFiles, model.UploadFile{
 			ID:       fileId,
 			Filename: fileHeader.Filename,
 		})
+
+		fileNames = append(fileNames, fileHeader.Filename)
 
 	}
 
@@ -282,16 +293,25 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 
 	uploadId := uuid.New().String()
 
-	multipleFileResponse := &MultipleFileResponse{
+	multipleFileResponse := &model.MultipleFileResponse{
+		ChatId:      chatId,
 		UploadId:    uploadId,
+		TotalPages:  totalPages,
 		UploadFiles: uploadedFiles,
+		Filenames:   fileNames,
 	}
 
-	err = f.FileService.WriteUploadFiles(multipleFileResponse)
+	err = f.FileService.WriteUploadFiles(ctx, multipleFileResponse)
 	if err != nil {
 		// file delete
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
 	}
 
-	_ = response.WriteJsonResponse(w, r, http.StatusOK, multipleFileResponse)
+	qa, err := f.FileService.WriteUploadQA(ctx, multipleFileResponse)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, qa)
 
 }
