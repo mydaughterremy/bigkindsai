@@ -23,8 +23,80 @@ type CreateChatCompletionRequest struct {
 	Provider string `json:"provider" example:""`
 }
 
+type CreateChatCompletionFileRequest struct {
+	Message  string `json:"message" example:"파일에서 제일 중요한 내용 찾아줘"`
+	Session  string `json:"session" example:"session_id_value"`
+	JobGroup string `json:"job_group" example:"통계용"`
+}
+
 type DevCreateChatCompletionMulti struct {
 	ChatId string `json:"chat_id"`
+}
+
+func (h *completionHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req CreateChatCompletionFileRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+
+	chatId := chi.URLParam(r, "chat_id")
+
+	var chatChannel chan *service.CreateChatCompletionResult
+
+	chatChannel, err = h.service.CreateChatCompletionFile(ctx, &service.CreateChatCompletionParameter{
+		ChatID:   chatId,
+		Session:  req.Session,
+		JobGroup: req.JobGroup,
+		Messages: []*model.Message{
+			{
+				Role:    "user",
+				Content: req.Message,
+			},
+		},
+	})
+
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case result, ok := <-chatChannel:
+				if !ok {
+					return
+				}
+				if result.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, result.Error)
+				}
+
+				body, err := json.Marshal(result.Completion)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, err)
+					return
+				}
+				_ = response.WriteStreamResponse(w, body)
+			}
+		}
+
+	}()
+
+	wg.Wait()
+
 }
 
 // CreateChatCompletionMulti godoc

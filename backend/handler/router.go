@@ -39,10 +39,15 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	questionGuidesService := &service.QuestionGuidesService{}
 
 	eventLogService := service.NewEventLogService(writer)
+	fileService := &service.FileService{
+		FileRepository: fileRepository,
+		QARepository:   qARepository,
+	}
 
 	completionService, err := service.NewCompletionService(
 		chatService,
 		eventLogService,
+		fileService,
 	)
 	if err != nil {
 		panic(err)
@@ -59,13 +64,10 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	}
 
 	fileHandler := &FileHandler{
-		UploadDir: "./upload",
-		MaxSize:   int64(30 * 1024 * 1024 * 1024),
-		MaxNum:    int64(5),
-		FileService: &service.FileService{
-			FileRepository: fileRepository,
-			QARepository:   qARepository,
-		},
+		UploadDir:   "./upload",
+		MaxSize:     int64(30 * 1024 * 1024 * 1024),
+		MaxNum:      int64(5),
+		FileService: fileService,
 		ChatService: chatService,
 	}
 
@@ -162,6 +164,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 			router.Post("/login", chatHandler.Login)
 			router.Post("/", chatHandler.CreateUserChat)
 			router.Post("/{chat_id}/completions/multi", completionHandler.CreateChatCompletionMulti)
+			router.Post("/{chat_id}/completion/file", completionHandler.CreateChatCompletionFile)
 		})
 		router.Route("/issue", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
@@ -184,6 +187,12 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	router.Get("/healthz", func(responseWriter http.ResponseWriter, _ *http.Request) {
 		responseWriter.WriteHeader(http.StatusOK)
 		_, _ = responseWriter.Write([]byte("OK"))
+	})
+
+	router.Route("/dev", func(router chi.Router) {
+		router.Use(authenticator.AuthMiddleware)
+		router.Get("/uploadId/{chat_id}", fileHandler.GetUploadId)
+		router.Post("/chats/{chat_id}/completion/file", fileHandler.CreateChatCompletionFile)
 	})
 
 	router.Get("/swagger/*", httpSwagger.Handler(

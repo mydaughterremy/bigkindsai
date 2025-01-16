@@ -50,6 +50,24 @@ type DocParserResult struct {
 	Usage    int    `json:"usage"`
 }
 
+type FileContent struct {
+	FileId   string
+	Filename string
+	Content  string
+}
+
+type FileChunk struct {
+	FileId    string
+	Score     float64
+	Chunk     string
+	Filename  string
+	Embedding []float64
+}
+
+func (f *FileHandler) GetUploadDir() string {
+	return f.UploadDir
+}
+
 func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(f.MaxSize)
 	if err != nil {
@@ -155,6 +173,87 @@ func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req CreateChatCompletionFileRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+
+	chatId := chi.URLParam(r, "chat_id")
+	uploadId := f.FileService.GetUploadId(ctx, chatId)
+	if uploadId == "" {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("there is no uploadfile in this chatid"))
+		return
+	}
+
+	files, err := f.FileService.GetFiles(ctx, uploadId)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("error get files from uploadid"))
+		return
+	}
+
+	var fx []*FileContent
+
+	for _, file := range files {
+		fileContent, err := f.FileService.GetFileContent(file.ID)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("error read file content"))
+			return
+		}
+		fx = append(fx, &FileContent{
+			FileId:   file.ID,
+			Filename: file.Filename,
+			Content:  string(fileContent),
+		})
+	}
+
+	var fc []*FileChunk
+	chunkSize := 500
+
+	var embeddingTokens int
+
+	for _, file := range fx {
+		s := file.Content
+		for i := 0; i < len(s); i += chunkSize {
+			end := i + chunkSize
+			if end > len(s) {
+				end = len(s)
+			}
+			c := s[i:end]
+
+			e, t, err := f.FileService.GetEmbedding(c)
+			if err != nil {
+				_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+				return
+			}
+
+			embeddingTokens += t
+
+			fc = append(fc, &FileChunk{
+				FileId:    file.FileId,
+				Chunk:     c,
+				Filename:  file.Filename,
+				Embedding: e,
+			})
+		}
+
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, fc)
+}
+
+func (f *FileHandler) GetUploadId(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	chatId := chi.URLParam(r, "chat_id")
+	uploadId := f.FileService.GetUploadId(ctx, chatId)
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, uploadId)
+}
+
 func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var fileNames []string
@@ -174,8 +273,6 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 	maxCap := f.MaxNum * f.MaxSize
 	r.Body = http.MaxBytesReader(w, r.Body, maxCap)
 
-	fmt.Println("maxCap", string(int(maxCap)))
-
 	err := r.ParseMultipartForm(maxCap)
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
@@ -191,7 +288,6 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 	uploadedFiles := []model.UploadFile{}
 	var totalPages int
 	for _, fileHeader := range files {
-		fmt.Println("Filename: " + fileHeader.Filename)
 		fileId := uuid.New().String()
 		filepath := filepath.Join(f.UploadDir, fileId)
 		src, err := fileHeader.Open()

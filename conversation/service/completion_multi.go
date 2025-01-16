@@ -253,21 +253,26 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 	predictOpts = append(predictOpts, chat.WithoutStream)
 
 	// model setting
-	solarMini := &model.CompletionLLM{
+	// solarMini := &model.CompletionLLM{
+	// 	Provider:  llmProvider,
+	// 	ModelName: "solar-mini",
+	// }
+
+	solarPro := &model.CompletionLLM{
 		Provider:  llmProvider,
-		ModelName: "solar-mini",
+		ModelName: "solar-pro",
 	}
 
 	// 사용자 메세지를 바탕으로 function 추출
-	slog.Info("===== ===== Check function... ", "provider", solarMini.Provider, "model", solarMini.ModelName, "maxFallbackCount", solarMini.MaxFallbackCount)
-	predictOpts = append(predictOpts, chat.WithModel(solarMini.ModelName))
-	client, err := llmclient.NewClient(s.client, solarMini.Provider, solarMini.ModelName, 0, chat.WithStreamEnabled)
+	slog.Info("===== ===== Check function... ", "provider", solarPro.Provider, "model", solarPro.ModelName, "maxFallbackCount", solarPro.MaxFallbackCount)
+	predictOpts = append(predictOpts, chat.WithModel(solarPro.ModelName))
+	client, err := llmclient.NewClient(s.client, solarPro.Provider, solarPro.ModelName, 0, chat.WithStreamEnabled)
 	if err != nil {
 		return nil, err
 	}
 
-	predictOpts = append(predictOpts, chat.WithNilTollCall)
-	predictOpts = append(predictOpts, chat.WithNilTollChoice)
+	// predictOpts = append(predictOpts, chat.WithNilTollCall)
+	// predictOpts = append(predictOpts, chat.WithNilTollChoice)
 
 	// for i := 0; i < len(reqUserPayloads); i++ {
 	// 	slog.Info(fmt.Sprintf("===== ===== i: %d", i))
@@ -316,10 +321,6 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 
 	// 답변 생성은 sloar pro
 	// function이 있는 없는 경우 처리
-	solarPro := &model.CompletionLLM{
-		Provider:  llmProvider,
-		ModelName: "solar-pro",
-	}
 
 	references := make([]model.Reference, 0)
 	// var streamError error

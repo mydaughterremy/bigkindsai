@@ -1,7 +1,6 @@
 package model
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -10,7 +9,7 @@ type QA struct {
 	ChatID              string           `gorm:"type:char(36);index"`
 	SessionID           string           `gorm:"type:varchar(36);index"`
 	UploadID            string           `gorm:"type:char(36);index"`
-	UploadDeleted       sql.NullBool     `gorm:"default:false"`
+	UploadDeleted       int              `gorm:"type:tinyint(1)"`
 	JobGroup            string           `gorm:"type:varchar(36);index"`
 	Question            string           `gorm:"type:text;index:,class:FULLTEXT"`
 	Answer              string           `gorm:"type:text"`

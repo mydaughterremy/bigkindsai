@@ -25,6 +25,7 @@ import (
 type CompletionService struct {
 	ChatService     *ChatService
 	EventLogService *EventLogService
+	FileService     *FileService
 
 	convEngineEndpoint string
 	client             *http.Client
@@ -44,9 +45,24 @@ type CreateChatCompletionResult struct {
 	Error      error             `json:"error"`
 }
 
+type FileContent struct {
+	FileId   string
+	Filename string
+	Content  string
+}
+
+type FileChunk struct {
+	FileId    string
+	Index     int
+	Chunk     string
+	Filename  string
+	Embedding []float64
+}
+
 func NewCompletionService(
 	chatService *ChatService,
 	eventLogService *EventLogService,
+	fileService *FileService,
 ) (*CompletionService, error) {
 
 	convEngineEndpoint, ok := os.LookupEnv("UPSTAGE_CONVERSATION_ENGINE_ENDPOINT")
@@ -62,12 +78,54 @@ func NewCompletionService(
 
 	service := &CompletionService{
 		ChatService:        chatService,
+		FileService:        fileService,
 		EventLogService:    eventLogService,
 		convEngineEndpoint: convEngineEndpoint,
 		client:             client,
 	}
 
 	return service, nil
+}
+
+func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	// file handling
+	// chatID에 uploadID가 있는지 확인
+	uploadId := s.FileService.GetUploadId(ctx, param.ChatID)
+
+	if uploadId == "" {
+		return nil, fmt.Errorf("there is no upload file in this chatid")
+	}
+
+	// uploadID가 있으면 uploadID에 해당하는 파일 이름, 파일 아이디, 가져 옴
+	files, err := s.FileService.GetFiles(ctx, uploadId)
+	if err != nil {
+		return nil, err
+	}
+
+	var fx []*FileContent
+	// fileID에서 텍스트 읽어와서 리스트로 저장
+	for _, file := range files {
+		fileContent, err := s.FileService.GetFileContent(file.ID)
+		if err != nil {
+			return nil, err
+		}
+		fx = append(fx, &FileContent{
+			FileId:   file.ID,
+			Filename: file.Filename,
+			Content:  string(fileContent),
+		})
+	}
+
+	for _, f := range fx {
+		fmt.Println(f.Content)
+	}
+
+	// 가져온 텍스트를 500 chunk로 나누어 리스트로 변환
+	// 각각의 리스트의 Content, 사용자 메세지를 embedding 모델을 활용하여 벡터화
+	// 각각의 벡터중 cos 기준 0.5 미만 값 절삭
+	// 가장 높은 top k content 목록 저장
+	// completionRequest에 해당 파라미터 추가하여 conversation에 전달
+	return nil, nil
 }
 
 func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
