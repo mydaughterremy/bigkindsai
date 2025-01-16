@@ -88,44 +88,180 @@ func NewCompletionService(
 }
 
 func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
-	// file handling
-	// chatID에 uploadID가 있는지 확인
-	uploadId := s.FileService.GetUploadId(ctx, param.ChatID)
+	qaId := uuid.New().String()
+	chatId := param.ChatID
+	sessionId := param.Session
+	jobGroup := param.JobGroup
 
-	if uploadId == "" {
-		return nil, fmt.Errorf("there is no upload file in this chatid")
+	if chatId == "" || sessionId == "" {
+		return nil, fmt.Errorf("chat id, session id is empty")
 	}
 
-	// uploadID가 있으면 uploadID에 해당하는 파일 이름, 파일 아이디, 가져 옴
-	files, err := s.FileService.GetFiles(ctx, uploadId)
+	if sessionId == "error-test" {
+		return nil, fmt.Errorf("error test")
+	}
+
+	messages := param.Messages
+
+	lastUserMessage := s.findLastUserMessage(messages)
+	if lastUserMessage == nil {
+		return nil, fmt.Errorf("there is no user message")
+	}
+
+	questionCreatedEvent := &pb.Event{
+		QaId:      qaId,
+		CreatedAt: timestamppb.New(time.Now()),
+		Event: &pb.Event_QuestionCreated{
+			QuestionCreated: &pb.QuestionCreated{
+				ChatId:    chatId,
+				SessionId: sessionId,
+				JobGroup:  jobGroup,
+				Question:  lastUserMessage.Content,
+			},
+		},
+	}
+	err := s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
 	if err != nil {
 		return nil, err
 	}
 
-	var fx []*FileContent
-	// fileID에서 텍스트 읽어와서 리스트로 저장
-	for _, file := range files {
-		fileContent, err := s.FileService.GetFileContent(file.ID)
-		if err != nil {
-			return nil, err
+	completionMultiChannel := make(chan *CreateChatCompletionResult, 10)
+
+	go func() {
+		defer close(completionMultiChannel)
+
+		if sessionId == "stream-error-test" {
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("stream error test"),
+			}
+			return
 		}
-		fx = append(fx, &FileContent{
-			FileId:   file.ID,
-			Filename: file.Filename,
-			Content:  string(fileContent),
-		})
-	}
 
-	for _, f := range fx {
-		fmt.Println(f.Content)
-	}
+		lastUserPayloads := messages[len(messages)-1]
+		if lastUserPayloads.Role != "user" {
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("last payload role should be user"),
+			}
+			return
+		}
+		if len(strings.Split(lastUserPayloads.Content, " ")) == 1 {
+			completion := &model.Completion{
+				Object:  "chat.completion",
+				Id:      qaId,
+				Created: int(time.Now().Unix()),
+				Delta: &model.CompletionDelta{
+					Content: "더 구체적인 질문을 해 주세요",
+				},
+			}
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Completion: completion,
+			}
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Done: true,
+			}
+			return
+		}
+		tokenCount := 0
 
-	// 가져온 텍스트를 500 chunk로 나누어 리스트로 변환
-	// 각각의 리스트의 Content, 사용자 메세지를 embedding 모델을 활용하여 벡터화
-	// 각각의 벡터중 cos 기준 0.5 미만 값 절삭
-	// 가장 높은 top k content 목록 저장
-	// completionRequest에 해당 파라미터 추가하여 conversation에 전달
-	return nil, nil
+		completionRequest := model.CreateChatCompletionRequest{
+			Messages: messages,
+			Provider: "",
+		}
+		requestBody, err := json.Marshal(completionRequest)
+		if err != nil {
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		stream, err := request.CreateChatStream(ctx, s.client, s.convEngineEndpoint+"/file", requestBody)
+		if err != nil {
+			completionMultiChannel <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		defer stream.Close()
+
+		for {
+			select {
+			case <-ctx.Done():
+				completionMultiChannel <- &CreateChatCompletionResult{
+					Error: ctx.Err(),
+				}
+				return
+			default:
+				resp, err := stream.Recv()
+				if err != nil && err != io.EOF {
+					completionMultiChannel <- &CreateChatCompletionResult{
+						Error: err,
+					}
+
+					return
+				}
+				if err == io.EOF {
+					return
+				}
+
+				completion := &model.Completion{
+					Object:  "chat.completion",
+					Id:      qaId,
+					Created: int(time.Now().Unix()),
+					Delta:   resp.Delta,
+				}
+
+				completionMultiChannel <- &CreateChatCompletionResult{
+					Completion: completion,
+				}
+
+				// count token
+				tokenCount += resp.TokenUsage
+				_ = s.EventLogService.WriteEvent(ctx, &pb.Event{
+					QaId: qaId,
+					Event: &pb.Event_TokenCountUpdated{
+						TokenCountUpdated: &pb.TokenCountUpdated{
+							TokenCount: int32(tokenCount),
+						},
+					},
+					CreatedAt: timestamppb.New(time.Now()),
+				})
+
+				// write event
+				merged := stream.ReadUntilNow()
+
+				if merged.Delta.Content != "" {
+					answerUpdatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_AnswerUpdated{
+							AnswerUpdated: &pb.AnswerUpdated{
+								Answer: merged.Delta.Content,
+								// llm model, llm provider 없는데 ?
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
+				}
+
+				if len(merged.Delta.References) > 0 {
+					referencesCreatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_ReferencesCreated{
+							ReferencesCreated: &pb.ReferencesCreated{
+								References: model.FromModelReferencesToProtoReferences(merged.Delta.References),
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, referencesCreatedEvent)
+				}
+			}
+		}
+
+	}()
+
+	return completionMultiChannel, nil
+
 }
 
 func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {

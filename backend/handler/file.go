@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"sync"
 
 	"bigkinds.or.kr/backend/internal/http/response"
 	"bigkinds.or.kr/backend/model"
@@ -18,8 +20,9 @@ import (
 )
 
 type FileHandler struct {
-	FileService *service.FileService
-	ChatService *service.ChatService
+	FileService       *service.FileService
+	ChatService       *service.ChatService
+	CompletionService *service.CompletionService
 
 	UploadDir string
 	MaxSize   int64 // maximum file size in bytes
@@ -243,7 +246,92 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 
 	}
 
-	_ = response.WriteJsonResponse(w, r, http.StatusOK, fc)
+	messageE, t, err := f.FileService.GetEmbedding(req.Message)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	embeddingTokens += t
+
+	for _, c := range fc {
+		s, err := f.FileService.CosineSimilarity(messageE, c.Embedding)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		}
+		c.Score = s
+	}
+
+	sort.Slice(fc, func(i, j int) bool {
+		return fc[i].Score > fc[j].Score
+	})
+
+	topk := 5
+
+	if len(fc) < topk+1 {
+		topk = len(fc)
+	}
+
+	var messages []*model.Message
+
+	for _, file := range fc[:topk] {
+		messages = append(messages, &model.Message{
+			Role:    "assistant",
+			Content: file.Chunk,
+		})
+	}
+
+	messages = append(messages, &model.Message{
+		Role:    "user",
+		Content: req.Message,
+	})
+
+	var chatChannel chan *service.CreateChatCompletionResult
+	chatChannel, err = f.CompletionService.CreateChatCompletionFile(ctx, &service.CreateChatCompletionParameter{
+		ChatID:   chatId,
+		Session:  req.Session,
+		JobGroup: req.JobGroup,
+		Messages: messages,
+	})
+
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case result, ok := <-chatChannel:
+				if !ok {
+					return
+				}
+				if result.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, result.Error)
+				}
+
+				body, err := json.Marshal(result.Completion)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, err)
+					return
+				}
+				_ = response.WriteStreamResponse(w, body)
+			}
+		}
+
+	}()
+
+	wg.Wait()
+
+	// _ = response.WriteJsonResponse(w, r, http.StatusOK, fc)
 }
 
 func (f *FileHandler) GetUploadId(w http.ResponseWriter, r *http.Request) {

@@ -33,71 +33,71 @@ type DevCreateChatCompletionMulti struct {
 	ChatId string `json:"chat_id"`
 }
 
-func (h *completionHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+// func (h *completionHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Request) {
+// 	ctx := r.Context()
 
-	var req CreateChatCompletionFileRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
-		return
-	}
+// 	var req CreateChatCompletionFileRequest
+// 	err := json.NewDecoder(r.Body).Decode(&req)
+// 	if err != nil {
+// 		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+// 		return
+// 	}
 
-	chatId := chi.URLParam(r, "chat_id")
+// 	chatId := chi.URLParam(r, "chat_id")
 
-	var chatChannel chan *service.CreateChatCompletionResult
+// 	var chatChannel chan *service.CreateChatCompletionResult
 
-	chatChannel, err = h.service.CreateChatCompletionFile(ctx, &service.CreateChatCompletionParameter{
-		ChatID:   chatId,
-		Session:  req.Session,
-		JobGroup: req.JobGroup,
-		Messages: []*model.Message{
-			{
-				Role:    "user",
-				Content: req.Message,
-			},
-		},
-	})
+// 	chatChannel, err = h.service.CreateChatCompletionFile(ctx, &service.CreateChatCompletionParameter{
+// 		ChatID:   chatId,
+// 		Session:  req.Session,
+// 		JobGroup: req.JobGroup,
+// 		Messages: []*model.Message{
+// 			{
+// 				Role:    "user",
+// 				Content: req.Message,
+// 			},
+// 		},
+// 	})
 
-	if err != nil {
-		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
-		return
-	}
+// 	if err != nil {
+// 		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+// 		return
+// 	}
 
-	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
-	var wg sync.WaitGroup
-	wg.Add(1)
+// 	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+// 	var wg sync.WaitGroup
+// 	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case result, ok := <-chatChannel:
-				if !ok {
-					return
-				}
-				if result.Error != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, result.Error)
-				}
+// 	go func() {
+// 		defer wg.Done()
+// 		for {
+// 			select {
+// 			case <-ctx.Done():
+// 				return
+// 			case result, ok := <-chatChannel:
+// 				if !ok {
+// 					return
+// 				}
+// 				if result.Error != nil {
+// 					w.WriteHeader(http.StatusInternalServerError)
+// 					_ = response.WriteStreamErrorResponse(w, result.Error)
+// 				}
 
-				body, err := json.Marshal(result.Completion)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					_ = response.WriteStreamErrorResponse(w, err)
-					return
-				}
-				_ = response.WriteStreamResponse(w, body)
-			}
-		}
+// 				body, err := json.Marshal(result.Completion)
+// 				if err != nil {
+// 					w.WriteHeader(http.StatusInternalServerError)
+// 					_ = response.WriteStreamErrorResponse(w, err)
+// 					return
+// 				}
+// 				_ = response.WriteStreamResponse(w, body)
+// 			}
+// 		}
 
-	}()
+// 	}()
 
-	wg.Wait()
+// 	wg.Wait()
 
-}
+// }
 
 // CreateChatCompletionMulti godoc
 // @Summary Create a new CompletionMulti

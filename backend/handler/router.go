@@ -164,7 +164,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 			router.Post("/login", chatHandler.Login)
 			router.Post("/", chatHandler.CreateUserChat)
 			router.Post("/{chat_id}/completions/multi", completionHandler.CreateChatCompletionMulti)
-			router.Post("/{chat_id}/completion/file", completionHandler.CreateChatCompletionFile)
+			router.Post("/{chat_id}/completion/file", fileHandler.CreateChatCompletionFile)
 		})
 		router.Route("/issue", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)

@@ -49,6 +49,15 @@ message Reference {
     ReferenceAttributes attributes = 2;
 }
 
+message FileReference{
+    string filename = 1;
+    string content =2;
+}
+
+message FileReferencesCreated {
+    repeated FileReference file_references = 1;
+}
+
 message ReferencesCreated {
     repeated Reference references = 1;
 }
