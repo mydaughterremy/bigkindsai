@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -186,6 +187,8 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	var fc []*FileChunk
+
 	chatId := chi.URLParam(r, "chat_id")
 	uploadId := f.FileService.GetUploadId(ctx, chatId)
 	if uploadId == "" {
@@ -214,7 +217,6 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 		})
 	}
 
-	var fc []*FileChunk
 	chunkSize := 500
 
 	var embeddingTokens int
@@ -265,6 +267,12 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 		return fc[i].Score > fc[j].Score
 	})
 
+	slog.Info(fmt.Sprintf("best score: %f", fc[0].Score))
+
+	slog.Info("===== file handling is finished")
+
+	// slog.Info("===== do after file handling")
+
 	topk := 5
 
 	if len(fc) < topk+1 {
@@ -299,6 +307,7 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -315,6 +324,10 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 				if result.Error != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					_ = response.WriteStreamErrorResponse(w, result.Error)
+					return
+				} else if result.Done {
+					_ = response.WriteStreamResponse(w, []byte("[DONE]"))
+					return
 				}
 
 				body, err := json.Marshal(result.Completion)

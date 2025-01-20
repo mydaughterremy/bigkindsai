@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -44,6 +46,8 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		QARepository:   qARepository,
 	}
 
+	slog.Info(fmt.Sprintf("===== NewRouter -> q id: %T", eventLogService))
+
 	completionService, err := service.NewCompletionService(
 		chatService,
 		eventLogService,
@@ -64,11 +68,12 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	}
 
 	fileHandler := &FileHandler{
-		UploadDir:   "./upload",
-		MaxSize:     int64(30 * 1024 * 1024 * 1024),
-		MaxNum:      int64(5),
-		FileService: fileService,
-		ChatService: chatService,
+		UploadDir:         "./upload",
+		MaxSize:           int64(30 * 1024 * 1024 * 1024),
+		MaxNum:            int64(5),
+		FileService:       fileService,
+		ChatService:       chatService,
+		CompletionService: completionService,
 	}
 
 	chatHandler := &ChatHandler{
@@ -192,7 +197,6 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 	router.Route("/dev", func(router chi.Router) {
 		router.Use(authenticator.AuthMiddleware)
 		router.Get("/uploadId/{chat_id}", fileHandler.GetUploadId)
-		router.Post("/chats/{chat_id}/completion/file", fileHandler.CreateChatCompletionFile)
 	})
 
 	router.Get("/swagger/*", httpSwagger.Handler(

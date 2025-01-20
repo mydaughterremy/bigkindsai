@@ -45,6 +45,10 @@ func NewRouter() chi.Router {
 	completionMultiHandler := &completionMultiHandler{
 		s: completionMultiService,
 	}
+	completionFileService := service.NewCompletionFileService(tokenCounter)
+	completionFileHandler := &CompletionFileHandler{
+		s: completionFileService,
+	}
 
 	summaryHandler := &summaryHandler{
 		service: summaryService,
@@ -66,6 +70,7 @@ func NewRouter() chi.Router {
 	router.Route("/v1", func(router chi.Router) {
 		router.Post("/chat/completions", completionHandler.CreateChatCompletion)
 		router.Post("/chat/completions/multi", completionMultiHandler.CreateChatCompletionMulti)
+		router.Post("/chat/completions/file", completionFileHandler.CreateChatCompletionFile)
 	})
 	router.Route("/v2", func(router chi.Router) {
 		router.Post("/topic", topicHandler.HandleTopic)

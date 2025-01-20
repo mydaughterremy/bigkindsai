@@ -385,6 +385,7 @@ func (s *CompletionMultiService) CreateChatCompletionMultiPrompt(ctx context.Con
 
 			callFunctionResponse, err := s.FunctionService.CallFunction(ctx, callResponse.Name, callResponse.Arguments, functions, extraArgs)
 			if err != nil {
+				slog.Info("===== ===== CallFunction error")
 				completionMultiResultChannel <- &CreateChatCompletionMultiResult{
 					Error: err,
 				}

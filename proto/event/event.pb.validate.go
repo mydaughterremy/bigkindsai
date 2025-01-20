@@ -334,6 +334,47 @@ func (m *Event) validate(all bool) error {
 			}
 		}
 
+	case *Event_FileReferencesCreated:
+		if v == nil {
+			err := EventValidationError{
+				field:  "Event",
+				reason: "oneof value cannot be a typed-nil",
+			}
+			if !all {
+				return err
+			}
+			errors = append(errors, err)
+		}
+
+		if all {
+			switch v := interface{}(m.GetFileReferencesCreated()).(type) {
+			case interface{ ValidateAll() error }:
+				if err := v.ValidateAll(); err != nil {
+					errors = append(errors, EventValidationError{
+						field:  "FileReferencesCreated",
+						reason: "embedded message failed validation",
+						cause:  err,
+					})
+				}
+			case interface{ Validate() error }:
+				if err := v.Validate(); err != nil {
+					errors = append(errors, EventValidationError{
+						field:  "FileReferencesCreated",
+						reason: "embedded message failed validation",
+						cause:  err,
+					})
+				}
+			}
+		} else if v, ok := interface{}(m.GetFileReferencesCreated()).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return EventValidationError{
+					field:  "FileReferencesCreated",
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
 	default:
 		_ = v // ensures v is used
 	}
@@ -1003,6 +1044,246 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = ReferenceValidationError{}
+
+// Validate checks the field values on FileReference with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *FileReference) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on FileReference with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in FileReferenceMultiError, or
+// nil if none found.
+func (m *FileReference) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *FileReference) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Filename
+
+	// no validation rules for Content
+
+	if len(errors) > 0 {
+		return FileReferenceMultiError(errors)
+	}
+
+	return nil
+}
+
+// FileReferenceMultiError is an error wrapping multiple validation errors
+// returned by FileReference.ValidateAll() if the designated constraints
+// aren't met.
+type FileReferenceMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m FileReferenceMultiError) Error() string {
+	var msgs []string
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m FileReferenceMultiError) AllErrors() []error { return m }
+
+// FileReferenceValidationError is the validation error returned by
+// FileReference.Validate if the designated constraints aren't met.
+type FileReferenceValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e FileReferenceValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e FileReferenceValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e FileReferenceValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e FileReferenceValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e FileReferenceValidationError) ErrorName() string { return "FileReferenceValidationError" }
+
+// Error satisfies the builtin error interface
+func (e FileReferenceValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sFileReference.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = FileReferenceValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = FileReferenceValidationError{}
+
+// Validate checks the field values on FileReferencesCreated with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the first error encountered is returned, or nil if there are no violations.
+func (m *FileReferencesCreated) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on FileReferencesCreated with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the result is a list of violation errors wrapped in
+// FileReferencesCreatedMultiError, or nil if none found.
+func (m *FileReferencesCreated) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *FileReferencesCreated) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	for idx, item := range m.GetFileReferences() {
+		_, _ = idx, item
+
+		if all {
+			switch v := interface{}(item).(type) {
+			case interface{ ValidateAll() error }:
+				if err := v.ValidateAll(); err != nil {
+					errors = append(errors, FileReferencesCreatedValidationError{
+						field:  fmt.Sprintf("FileReferences[%v]", idx),
+						reason: "embedded message failed validation",
+						cause:  err,
+					})
+				}
+			case interface{ Validate() error }:
+				if err := v.Validate(); err != nil {
+					errors = append(errors, FileReferencesCreatedValidationError{
+						field:  fmt.Sprintf("FileReferences[%v]", idx),
+						reason: "embedded message failed validation",
+						cause:  err,
+					})
+				}
+			}
+		} else if v, ok := interface{}(item).(interface{ Validate() error }); ok {
+			if err := v.Validate(); err != nil {
+				return FileReferencesCreatedValidationError{
+					field:  fmt.Sprintf("FileReferences[%v]", idx),
+					reason: "embedded message failed validation",
+					cause:  err,
+				}
+			}
+		}
+
+	}
+
+	if len(errors) > 0 {
+		return FileReferencesCreatedMultiError(errors)
+	}
+
+	return nil
+}
+
+// FileReferencesCreatedMultiError is an error wrapping multiple validation
+// errors returned by FileReferencesCreated.ValidateAll() if the designated
+// constraints aren't met.
+type FileReferencesCreatedMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m FileReferencesCreatedMultiError) Error() string {
+	var msgs []string
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m FileReferencesCreatedMultiError) AllErrors() []error { return m }
+
+// FileReferencesCreatedValidationError is the validation error returned by
+// FileReferencesCreated.Validate if the designated constraints aren't met.
+type FileReferencesCreatedValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e FileReferencesCreatedValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e FileReferencesCreatedValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e FileReferencesCreatedValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e FileReferencesCreatedValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e FileReferencesCreatedValidationError) ErrorName() string {
+	return "FileReferencesCreatedValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e FileReferencesCreatedValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sFileReferencesCreated.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = FileReferencesCreatedValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = FileReferencesCreatedValidationError{}
 
 // Validate checks the field values on ReferencesCreated with the rules defined
 // in the proto definition for this message. If any rules are violated, the

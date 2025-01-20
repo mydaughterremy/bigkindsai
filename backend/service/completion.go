@@ -88,6 +88,9 @@ func NewCompletionService(
 }
 
 func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	slog.Info("===== CreateChatCompletionFile")
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
+
 	qaId := uuid.New().String()
 	chatId := param.ChatID
 	sessionId := param.Session
@@ -120,18 +123,27 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 			},
 		},
 	}
+
+	// if questionCreatedEvent == nil {
+	// 	return nil, fmt.Errorf("===== createchatcompletionfile -> question create event is nil")
+	// }
+	slog.Info("===== questionCreatedEvent")
+	if s.EventLogService == nil {
+		return nil, fmt.Errorf("event service is nil")
+	}
+
 	err := s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
 	if err != nil {
 		return nil, err
 	}
 
-	completionMultiChannel := make(chan *CreateChatCompletionResult, 10)
+	completionFileChannel := make(chan *CreateChatCompletionResult, 10)
 
 	go func() {
-		defer close(completionMultiChannel)
+		defer close(completionFileChannel)
 
 		if sessionId == "stream-error-test" {
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Error: fmt.Errorf("stream error test"),
 			}
 			return
@@ -139,7 +151,7 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 
 		lastUserPayloads := messages[len(messages)-1]
 		if lastUserPayloads.Role != "user" {
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Error: fmt.Errorf("last payload role should be user"),
 			}
 			return
@@ -153,10 +165,10 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 					Content: "더 구체적인 질문을 해 주세요",
 				},
 			}
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Completion: completion,
 			}
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Done: true,
 			}
 			return
@@ -169,14 +181,14 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 		}
 		requestBody, err := json.Marshal(completionRequest)
 		if err != nil {
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Error: err,
 			}
 			return
 		}
 		stream, err := request.CreateChatStream(ctx, s.client, s.convEngineEndpoint+"/file", requestBody)
 		if err != nil {
-			completionMultiChannel <- &CreateChatCompletionResult{
+			completionFileChannel <- &CreateChatCompletionResult{
 				Error: err,
 			}
 			return
@@ -186,14 +198,15 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 		for {
 			select {
 			case <-ctx.Done():
-				completionMultiChannel <- &CreateChatCompletionResult{
+				completionFileChannel <- &CreateChatCompletionResult{
 					Error: ctx.Err(),
 				}
 				return
 			default:
 				resp, err := stream.Recv()
+				slog.Info("===== ===== CreateChatCompletionFile Recv")
 				if err != nil && err != io.EOF {
-					completionMultiChannel <- &CreateChatCompletionResult{
+					completionFileChannel <- &CreateChatCompletionResult{
 						Error: err,
 					}
 
@@ -210,7 +223,7 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 					Delta:   resp.Delta,
 				}
 
-				completionMultiChannel <- &CreateChatCompletionResult{
+				completionFileChannel <- &CreateChatCompletionResult{
 					Completion: completion,
 				}
 
@@ -243,28 +256,30 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
 				}
 
-				if len(merged.Delta.References) > 0 {
-					referencesCreatedEvent := &pb.Event{
+				if len(merged.Delta.FileReferences) > 0 {
+					fileReferencesCreatedEvent := &pb.Event{
 						QaId: qaId,
-						Event: &pb.Event_ReferencesCreated{
-							ReferencesCreated: &pb.ReferencesCreated{
-								References: model.FromModelReferencesToProtoReferences(merged.Delta.References),
+						Event: &pb.Event_FileReferencesCreated{
+							FileReferencesCreated: &pb.FileReferencesCreated{
+								FileReferences: model.FromModelFileReferencesToProtoFileReferences(merged.Delta.FileReferences),
 							},
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
-					_ = s.EventLogService.WriteEvent(ctx, referencesCreatedEvent)
+					_ = s.EventLogService.WriteEvent(ctx, fileReferencesCreatedEvent)
 				}
 			}
 		}
 
 	}()
 
-	return completionMultiChannel, nil
+	return completionFileChannel, nil
 
 }
 
 func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	slog.Info("===== CreateChatCompletionMulti")
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
 	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
@@ -335,6 +350,7 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 	if lastUserMessage == nil {
 		return nil, fmt.Errorf("there is no user message")
 	}
+
 	questionCreatedEvent := &pb.Event{
 		QaId:      qaId,
 		CreatedAt: timestamppb.New(time.Now()),
@@ -347,6 +363,8 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 			},
 		},
 	}
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
+
 	err = s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
 	if err != nil {
 		return nil, err
