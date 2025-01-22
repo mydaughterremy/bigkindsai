@@ -80,6 +80,7 @@ func (w *Worker) Run() {
 					slog.Info("query created", "query", string(b))
 					query.QA = qa
 				} else {
+					slog.Info(">>>>> do update query")
 					result, err := w.QAService.UpdateQA(context.Background(), query.QA)
 					if err != nil || result == nil {
 						slog.Error("failed to update qa", "error", err)

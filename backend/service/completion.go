@@ -87,7 +87,7 @@ func NewCompletionService(
 	return service, nil
 }
 
-func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter, fr []model.FileReference) (chan *CreateChatCompletionResult, error) {
 	slog.Info("===== CreateChatCompletionFile")
 	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
 
@@ -141,6 +141,18 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 
 	go func() {
 		defer close(completionFileChannel)
+		// completionFileChannel <- &CreateChatCompletionResult{
+		// 	Error: fmt.Errorf("stream error test"),
+		// }
+		// // return
+
+		completionFileChannel <- &CreateChatCompletionResult{
+			Completion: &model.Completion{
+				Delta: &model.CompletionDelta{
+					FileReferences: fr,
+				},
+			},
+		}
 
 		if sessionId == "stream-error-test" {
 			completionFileChannel <- &CreateChatCompletionResult{
@@ -248,7 +260,6 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 						Event: &pb.Event_AnswerUpdated{
 							AnswerUpdated: &pb.AnswerUpdated{
 								Answer: merged.Delta.Content,
-								// llm model, llm provider 없는데 ?
 							},
 						},
 						CreatedAt: timestamppb.New(time.Now()),
@@ -256,17 +267,18 @@ func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param 
 					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
 				}
 
-				if len(merged.Delta.FileReferences) > 0 {
+				if fr != nil {
 					fileReferencesCreatedEvent := &pb.Event{
 						QaId: qaId,
 						Event: &pb.Event_FileReferencesCreated{
 							FileReferencesCreated: &pb.FileReferencesCreated{
-								FileReferences: model.FromModelFileReferencesToProtoFileReferences(merged.Delta.FileReferences),
+								FileReferences: model.FromModelFileReferencesToProtoFileReferences(fr),
 							},
 						},
 						CreatedAt: timestamppb.New(time.Now()),
 					}
 					_ = s.EventLogService.WriteEvent(ctx, fileReferencesCreatedEvent)
+					fr = nil
 				}
 			}
 		}
@@ -439,9 +451,10 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 				resp, err := stream.Recv()
 				if err != nil && err != io.EOF {
 					completionMultiChannel <- &CreateChatCompletionResult{
+
 						Error: err,
 					}
-
+					slog.Info("***** error CreateChatCompletionResult...")
 					return
 				}
 				if err == io.EOF {

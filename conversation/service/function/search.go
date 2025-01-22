@@ -248,6 +248,7 @@ func (s *SearchPlugin) createSearchRequests(arguments map[string]interface{}, ex
 }
 
 func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{}, extraArgs *ExtraArgs) ([]byte, error) {
+	slog.Info("===== ===== ===== Search Call...")
 	endpoint := os.Getenv("UPSTAGE_SEARCHSERVICE_MSEARCH_ENDPOINT")
 	if endpoint == "" {
 		return nil, errors.New("search service endpoint not set")
@@ -283,6 +284,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		slog.Info("===== ===== ===== Search Call...")
 		return nil, err
 	}
 
@@ -295,7 +297,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 		return nil, err
 	}
 
-	merged := mergeChunks(references,extraArgs)
+	merged := mergeChunks(references, extraArgs)
 	body, err = marshalReference(merged)
 	if err != nil {
 		return nil, err
@@ -303,7 +305,6 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 
 	return body, nil
 }
-
 
 func (s *SearchPlugin) Definition() model.Function {
 	firstExampleStartTime := time.Date(s.CurrentTime.Time.Year(), s.CurrentTime.Time.Month(), s.CurrentTime.Time.Day(), 0, 0, 0, 0, s.CurrentTime.Location).AddDate(0, 0, -30).Format("2006-01-02T15:04:05-07:00")

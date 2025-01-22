@@ -69,7 +69,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 
 	fileHandler := &FileHandler{
 		UploadDir:         "./upload",
-		MaxSize:           int64(30 * 1024 * 1024 * 1024),
+		MaxSize:           int64(30 * 1024 * 1024 * 1024 * 1024 * 1024),
 		MaxNum:            int64(5),
 		FileService:       fileService,
 		ChatService:       chatService,

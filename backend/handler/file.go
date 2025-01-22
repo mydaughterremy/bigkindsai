@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"bigkinds.or.kr/backend/internal/http/response"
@@ -280,11 +281,17 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 	}
 
 	var messages []*model.Message
+	var fileReferences []model.FileReference
 
 	for _, file := range fc[:topk] {
 		messages = append(messages, &model.Message{
 			Role:    "assistant",
 			Content: file.Chunk,
+		})
+
+		fileReferences = append(fileReferences, model.FileReference{
+			FileName: file.Filename,
+			Content:  strings.ToValidUTF8(file.Chunk, ""),
 		})
 	}
 
@@ -299,7 +306,7 @@ func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Re
 		Session:  req.Session,
 		JobGroup: req.JobGroup,
 		Messages: messages,
-	})
+	}, fileReferences)
 
 	if err != nil {
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
@@ -376,6 +383,7 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 
 	err := r.ParseMultipartForm(maxCap)
 	if err != nil {
+		slog.Info("ParseMultipartForm error")
 		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
 		return
 	}
