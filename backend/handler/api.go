@@ -49,10 +49,31 @@ func (h *ApiHandler) GetApikey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ApiHandler) UpdateApikey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req model.Apikey
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+	}
 
+	ak, err := h.ApiService.UpdateApikey(ctx, req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, ak)
 }
 
 func (h *ApiHandler) DeleteApiley(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	k := chi.URLParam(r, "apikey")
+
+	err := h.ApiService.DeleteApikey(ctx, k)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, nil)
 
 }
 
