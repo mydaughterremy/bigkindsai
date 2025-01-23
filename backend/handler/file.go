@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"bigkinds.or.kr/backend/internal/http/response"
@@ -19,8 +23,9 @@ import (
 )
 
 type FileHandler struct {
-	FileService *service.FileService
-	ChatService *service.ChatService
+	FileService       *service.FileService
+	ChatService       *service.ChatService
+	CompletionService *service.CompletionService
 
 	UploadDir string
 	MaxSize   int64 // maximum file size in bytes
@@ -63,6 +68,23 @@ type ConversionStatus struct {
 	Message   string `json:"message"`
 	Status    string `json:"status"`
 	ErrorCode int    `json:"errorCode"`
+}
+type FileContent struct {
+	FileId   string
+	Filename string
+	Content  string
+}
+
+type FileChunk struct {
+	FileId    string
+	Score     float64
+	Chunk     string
+	Filename  string
+	Embedding []float64
+}
+
+func (f *FileHandler) GetUploadDir() string {
+	return f.UploadDir
 }
 
 func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
@@ -435,4 +457,187 @@ func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request)
 
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, qa)
 
+}
+func (f *FileHandler) CreateChatCompletionFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req CreateChatCompletionFileRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusBadRequest, err)
+		return
+	}
+
+	var fc []*FileChunk
+
+	chatId := chi.URLParam(r, "chat_id")
+	uploadId := f.FileService.GetUploadId(ctx, chatId)
+	if uploadId == "" {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("there is no uploadfile in this chatid"))
+		return
+	}
+
+	files, err := f.FileService.GetFiles(ctx, uploadId)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("error get files from uploadid"))
+		return
+	}
+
+	var fx []*FileContent
+
+	for _, file := range files {
+		fileContent, err := f.FileService.GetFileContent(file.ID)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, fmt.Errorf("error read file content"))
+			return
+		}
+		fx = append(fx, &FileContent{
+			FileId:   file.ID,
+			Filename: file.Filename,
+			Content:  string(fileContent),
+		})
+	}
+
+	chunkSize := 500
+
+	var embeddingTokens int
+
+	for _, file := range fx {
+		s := file.Content
+		for i := 0; i < len(s); i += chunkSize {
+			end := i + chunkSize
+			if end > len(s) {
+				end = len(s)
+			}
+			c := s[i:end]
+
+			e, t, err := f.FileService.GetEmbedding(c)
+			if err != nil {
+				_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+				return
+			}
+
+			embeddingTokens += t
+
+			fc = append(fc, &FileChunk{
+				FileId:    file.FileId,
+				Chunk:     c,
+				Filename:  file.Filename,
+				Embedding: e,
+			})
+		}
+
+	}
+
+	messageE, t, err := f.FileService.GetEmbedding(req.Message)
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+	}
+
+	embeddingTokens += t
+
+	for _, c := range fc {
+		s, err := f.FileService.CosineSimilarity(messageE, c.Embedding)
+		if err != nil {
+			_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		}
+		c.Score = s
+	}
+
+	sort.Slice(fc, func(i, j int) bool {
+		return fc[i].Score > fc[j].Score
+	})
+
+	slog.Info(fmt.Sprintf("best score: %f", fc[0].Score))
+
+	slog.Info("===== file handling is finished")
+
+	// slog.Info("===== do after file handling")
+
+	topk := 5
+
+	if len(fc) < topk+1 {
+		topk = len(fc)
+	}
+
+	var messages []*model.Message
+	var fileReferences []model.FileReference
+
+	for _, file := range fc[:topk] {
+		messages = append(messages, &model.Message{
+			Role:    "assistant",
+			Content: file.Chunk,
+		})
+
+		fileReferences = append(fileReferences, model.FileReference{
+			FileName: file.Filename,
+			Content:  strings.ToValidUTF8(file.Chunk, ""),
+		})
+	}
+
+	messages = append(messages, &model.Message{
+		Role:    "user",
+		Content: req.Message,
+	})
+
+	var chatChannel chan *service.CreateChatCompletionResult
+	chatChannel, err = f.CompletionService.CreateChatCompletionFile(ctx, &service.CreateChatCompletionParameter{
+		ChatID:   chatId,
+		Session:  req.Session,
+		JobGroup: req.JobGroup,
+		Messages: messages,
+	}, fileReferences)
+
+	if err != nil {
+		_ = response.WriteJsonErrorResponse(w, r, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Add("Content-Type", "text/event-stream;charset=utf-8")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case result, ok := <-chatChannel:
+				if !ok {
+					return
+				}
+				if result.Error != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, result.Error)
+					return
+				} else if result.Done {
+					_ = response.WriteStreamResponse(w, []byte("[DONE]"))
+					return
+				}
+
+				body, err := json.Marshal(result.Completion)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = response.WriteStreamErrorResponse(w, err)
+					return
+				}
+				_ = response.WriteStreamResponse(w, body)
+			}
+		}
+
+	}()
+
+	wg.Wait()
+
+	// _ = response.WriteJsonResponse(w, r, http.StatusOK, fc)
+}
+
+func (f *FileHandler) GetUploadId(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	chatId := chi.URLParam(r, "chat_id")
+	uploadId := f.FileService.GetUploadId(ctx, chatId)
+
+	_ = response.WriteJsonResponse(w, r, http.StatusOK, uploadId)
 }
