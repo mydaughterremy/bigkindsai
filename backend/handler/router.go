@@ -194,6 +194,7 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		router.Route("/file", func(router chi.Router) {
 			router.Use(authenticator.AuthMiddleware)
 			router.Post("/upload", fileHandler.FileUpload)
+			router.Post("/convert", fileHandler.FileConvert)
 			router.Post("/upload-multiple/{chat_id}", fileHandler.MultipleFileUpload)
 		})
 	})
