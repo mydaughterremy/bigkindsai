@@ -23,11 +23,10 @@ type TopicService struct {
 }
 
 type FindTopicResponse struct {
-	Title   string `json:"topic_title"`
-	Content string `json:"topic_content"`
-	Count int `json:"news_count"`
-	Ids []string `json:"news_ids"`
-
+	Title   string   `json:"topic_title"`
+	Content string   `json:"topic_content"`
+	Count   int      `json:"news_count"`
+	Ids     []string `json:"news_ids"`
 }
 
 func NewTopicService() *TopicService {
@@ -45,7 +44,7 @@ func NewTopicService() *TopicService {
 	return topicService
 }
 
-// 오늘의 이슈 요약, 뉴스 정보 조회 
+// 오늘의 이슈 요약, 뉴스 정보 조회
 func (topicService *TopicService) GetTopic(context context.Context, topicMessage string) (*FindTopicResponse, error) {
 
 	models := chat.GetLLMOptions()
@@ -74,7 +73,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	// 기존 llm request 이용
 	response, err := client.CreateChat(context, models[0], messages, chat.WithModel(models[1]))
 	if err != nil {
-		slog.Error("create keyword chat","error", err)
+		slog.Error("create keyword chat", "error", err)
 		return nil, err
 	}
 	callResponse, err := parsingKeywordResponse(response)
@@ -87,6 +86,8 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		return nil, err
 	}
 
+	//"{\"published_date_range\":{\"end_date\":\"2025-01-16T23:59:59+09:00\",\"start_date\":\"2025-01-16T00:00:00+09:00\"},\"standalone_query\":\"오늘 뉴스\"}"
+
 	arguments, err := function.ParseFunctionArguments(callResponse.Arguments)
 	if err != nil {
 		return nil, err
@@ -95,11 +96,11 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	extraArgs := &function.ExtraArgs{
 		RawQuery: topicMessage,
 		// 최대 뉴스 조회 개수
-		Topk: 300,
+		Topk: 2000,
 		// 최대 뉴스 병합 size
-		MaxChunkSize: 60000,
-		// 최대 뉴스 병합 개수 
-		MaxChunkNumber: 300,
+		MaxChunkSize: 180000,
+		// 최대 뉴스 병합 개수
+		MaxChunkNumber: 2000,
 	}
 
 	// 기존 search 소스코드 활용
@@ -118,7 +119,7 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	var news_ids []string
 	for i, item := range items.Items {
 		news_ids = append(news_ids, item.Attributes.NewsID)
-		if i < 5{
+		if i < 5 {
 			contents += item.Attributes.Content
 		}
 	}
@@ -128,11 +129,11 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 		Role:    "system",
 		Content: getSummaryPrompt(contents),
 	}
-	
+
 	// 기존 llm request 이용
 	summaryResponse, err := client.CreateChat(context, models[0], summaryMessage, chat.WithModel(models[1]))
 	if err != nil {
-		slog.Error("create summary chat ","error", err)
+		slog.Error("create summary chat ", "error", err)
 		return nil, err
 	}
 	summaryCallResponse, err := parsingSummaryResponse(summaryResponse)
@@ -142,8 +143,8 @@ func (topicService *TopicService) GetTopic(context context.Context, topicMessage
 	findTopicResponse := &FindTopicResponse{
 		Title:   summaryCallResponse.Title,
 		Content: summaryCallResponse.Content,
-		Count:  len(items.Items),
-		Ids: news_ids,
+		Count:   len(items.Items),
+		Ids:     news_ids,
 	}
 	return findTopicResponse, nil
 }
@@ -204,6 +205,6 @@ func parsingSummaryResponse(response *http.Response) (*gpt.ChatCompletionSummary
 			return &chatCompletionSummaryResponse, nil
 		}
 	}
-	
+
 	return nil, errors.New("no finish")
 }
