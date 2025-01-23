@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"bigkinds.or.kr/backend/internal/http/response"
 	"bigkinds.or.kr/backend/model"
@@ -48,6 +49,20 @@ type DocParserResult struct {
 	FileId   string `json:"file_id"`
 	Content  string `json:"content"`
 	Usage    int    `json:"usage"`
+}
+
+type UploadResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	ID      string `json:"id"`
+	Stamp   string `json:"stamp"`
+}
+
+type ConversionStatus struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	Status    string `json:"status"`
+	ErrorCode int    `json:"errorCode"`
 }
 
 func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +168,112 @@ func (f *FileHandler) FileUpload(w http.ResponseWriter, r *http.Request) {
 
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, docRes)
 
+}
+
+func (f *FileHandler) FileConvert(w http.ResponseWriter, r *http.Request) {
+	// Parse multipart form
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Failed to get file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Step 1: Upload file
+	uploadResp, err := f.uploadFile(file)
+	if err != nil {
+		http.Error(w, "Upload failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Step 2: Check conversion status
+	for {
+		status, err := f.checkConversion(uploadResp.ID)
+		if err != nil {
+			http.Error(w, "Status check failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if status.Status == "S" {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	// Step 3: Download converted file
+	convertedFile, err := f.downloadFile(uploadResp.ID, uploadResp.Stamp)
+	if err != nil {
+		http.Error(w, "Download failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Step 4: Send response
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=converted.pdf")
+	w.Write(convertedFile)
+}
+
+func (f *FileHandler) uploadFile(file multipart.File) (*UploadResponse, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("file", "file")
+	if err != nil {
+		return nil, err
+	}
+	io.Copy(part, file)
+
+	writer.WriteField("convertType", "PDF")
+	writer.Close()
+
+	req, err := http.NewRequest("POST", "http://converter.infraware.net/file/upload", body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var uploadResp UploadResponse
+	if err := json.NewDecoder(resp.Body).Decode(&uploadResp); err != nil {
+		return nil, err
+	}
+
+	return &uploadResp, nil
+}
+
+func (f *FileHandler) checkConversion(id string) (*ConversionStatus, error) {
+	resp, err := http.Get(fmt.Sprintf("http://converter.infraware.net/file/convert/%s", id))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var status ConversionStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, err
+	}
+
+	return &status, nil
+}
+
+func (f *FileHandler) downloadFile(id, stamp string) ([]byte, error) {
+	url := fmt.Sprintf("http://converter.infraware.net/file/download/%s.pdf?stamp=%s", id, stamp)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
 }
 
 func (f *FileHandler) MultipleFileUpload(w http.ResponseWriter, r *http.Request) {
