@@ -17,6 +17,7 @@ import (
 	"bigkinds.or.kr/backend/handler"
 	"bigkinds.or.kr/backend/internal/db"
 	"bigkinds.or.kr/backend/internal/server"
+	"bigkinds.or.kr/backend/model"
 )
 
 var args struct {
@@ -73,6 +74,7 @@ func main() {
 
 	// mysqlDB.AutoMigrate(&model.File{})
 	// mysqlDB.AutoMigrate(&model.QA{})
+	mysqlDB.AutoMigrate(&model.Apikey{})
 
 	writer := NewWriter()
 	defer writer.Close()

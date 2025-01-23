@@ -29,9 +29,14 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		AuthService: service.NewAuthService(),
 	}
 
+	apiRepository := repository.NewApiRepository(db, koreanStandardTime)
 	chatRepository := repository.NewChatRepository(db)
 	qARepository := repository.NewQARepository(db, koreanStandardTime)
 	fileRepository := repository.NewFileRepository(db)
+
+	apiService := &service.ApiService{
+		ApiRepository: apiRepository,
+	}
 
 	chatService := &service.ChatService{
 		ChatRepository: chatRepository,
@@ -112,6 +117,10 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 		Service: newsService,
 	}
 
+	apiHandler := &ApiHandler{
+		ApiService: apiService,
+	}
+
 	router.Use(log.RequestLogMiddleware)
 	router.Use(log.ResponseLogMiddleware)
 
@@ -186,6 +195,14 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 			router.Use(authenticator.AuthMiddleware)
 			router.Post("/upload", fileHandler.FileUpload)
 			router.Post("/upload-multiple/{chat_id}", fileHandler.MultipleFileUpload)
+		})
+	})
+
+	router.Route("/api", func(router chi.Router) {
+		router.Route("/v1", func(router chi.Router) {
+			router.Use(authenticator.AuthMiddleware)
+			router.Post("/apikey", apiHandler.CreateApikey)
+			router.Get("/apikey/{apikey}", apiHandler.GetApikey)
 		})
 	})
 
