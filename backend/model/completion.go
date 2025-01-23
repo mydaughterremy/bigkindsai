@@ -20,10 +20,11 @@ type Completion struct {
 }
 
 type CompletionDelta struct {
-	Content        string      `json:"content"`
-	References     []Reference `json:"references"`
-	Keywords       []string    `json:"keywords"`
-	RelatedQueries []string    `json:"related_queries"`
+	Content        string          `json:"content"`
+	References     []Reference     `json:"references"`
+	Keywords       []string        `json:"keywords"`
+	RelatedQueries []string        `json:"related_queries"`
+	FileReferences []FileReference `json:"file_references"`
 }
 
 func (c *Completion) Merge(chunk *Completion) error {

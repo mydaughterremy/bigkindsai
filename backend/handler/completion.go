@@ -23,6 +23,12 @@ type CreateChatCompletionRequest struct {
 	Provider string `json:"provider" example:""`
 }
 
+type CreateChatCompletionFileRequest struct {
+	Message  string `json:"message" example:"파일에서 제일 중요한 내용 찾아줘"`
+	Session  string `json:"session" example:"session_id_value"`
+	JobGroup string `json:"job_group" example:"통계용"`
+}
+
 type DevCreateChatCompletionMulti struct {
 	ChatId string `json:"chat_id"`
 }

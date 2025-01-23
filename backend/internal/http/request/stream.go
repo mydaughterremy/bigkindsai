@@ -89,7 +89,7 @@ func (c *SSEStream) Recv() (*model.Completion, error) {
 			var errresp ErrorResponse
 			err = json.Unmarshal(data, &errresp)
 			if err != nil {
-				return nil, errors.New("backend failed to unmarshal error response")
+				return nil, fmt.Errorf("backend failed to unmarshal error response, data: %s", string(data))
 			}
 
 			return nil, errors.New(errresp.Error)

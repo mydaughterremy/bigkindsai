@@ -15,6 +15,7 @@ message Event {
         ReferencesCreated references_created = 6;
         KeywordsCreated keywords_created = 7;
         RelatedQueriesCreated related_queries_created = 8;
+        FileReferencesCreated file_references_created = 9;
     }
 }
 
@@ -47,6 +48,15 @@ message ReferenceAttributes {
 message Reference {
     string id = 1;
     ReferenceAttributes attributes = 2;
+}
+
+message FileReference{
+    string filename = 1;
+    string content =2;
+}
+
+message FileReferencesCreated {
+    repeated FileReference file_references = 1;
 }
 
 message ReferencesCreated {

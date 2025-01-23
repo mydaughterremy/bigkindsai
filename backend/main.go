@@ -72,8 +72,9 @@ func main() {
 		panic(err)
 	}
 
-	mysqlDB.AutoMigrate(&model.File{})
-	mysqlDB.AutoMigrate(&model.QA{})
+	// mysqlDB.AutoMigrate(&model.File{})
+	// mysqlDB.AutoMigrate(&model.QA{})
+	mysqlDB.AutoMigrate(&model.Apikey{})
 
 	writer := NewWriter()
 	defer writer.Close()

@@ -25,6 +25,7 @@ import (
 type CompletionService struct {
 	ChatService     *ChatService
 	EventLogService *EventLogService
+	FileService     *FileService
 
 	convEngineEndpoint string
 	client             *http.Client
@@ -44,9 +45,24 @@ type CreateChatCompletionResult struct {
 	Error      error             `json:"error"`
 }
 
+type FileContent struct {
+	FileId   string
+	Filename string
+	Content  string
+}
+
+type FileChunk struct {
+	FileId    string
+	Index     int
+	Chunk     string
+	Filename  string
+	Embedding []float64
+}
+
 func NewCompletionService(
 	chatService *ChatService,
 	eventLogService *EventLogService,
+	fileService *FileService,
 ) (*CompletionService, error) {
 
 	convEngineEndpoint, ok := os.LookupEnv("UPSTAGE_CONVERSATION_ENGINE_ENDPOINT")
@@ -62,6 +78,7 @@ func NewCompletionService(
 
 	service := &CompletionService{
 		ChatService:        chatService,
+		FileService:        fileService,
 		EventLogService:    eventLogService,
 		convEngineEndpoint: convEngineEndpoint,
 		client:             client,
@@ -70,7 +87,211 @@ func NewCompletionService(
 	return service, nil
 }
 
+func (s *CompletionService) CreateChatCompletionFile(ctx context.Context, param *CreateChatCompletionParameter, fr []model.FileReference) (chan *CreateChatCompletionResult, error) {
+	slog.Info("===== CreateChatCompletionFile")
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
+
+	qaId := uuid.New().String()
+	chatId := param.ChatID
+	sessionId := param.Session
+	jobGroup := param.JobGroup
+
+	if chatId == "" || sessionId == "" {
+		return nil, fmt.Errorf("chat id, session id is empty")
+	}
+
+	if sessionId == "error-test" {
+		return nil, fmt.Errorf("error test")
+	}
+
+	messages := param.Messages
+
+	lastUserMessage := s.findLastUserMessage(messages)
+	if lastUserMessage == nil {
+		return nil, fmt.Errorf("there is no user message")
+	}
+
+	questionCreatedEvent := &pb.Event{
+		QaId:      qaId,
+		CreatedAt: timestamppb.New(time.Now()),
+		Event: &pb.Event_QuestionCreated{
+			QuestionCreated: &pb.QuestionCreated{
+				ChatId:    chatId,
+				SessionId: sessionId,
+				JobGroup:  jobGroup,
+				Question:  lastUserMessage.Content,
+			},
+		},
+	}
+
+	// if questionCreatedEvent == nil {
+	// 	return nil, fmt.Errorf("===== createchatcompletionfile -> question create event is nil")
+	// }
+	slog.Info("===== questionCreatedEvent")
+	if s.EventLogService == nil {
+		return nil, fmt.Errorf("event service is nil")
+	}
+
+	err := s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
+	if err != nil {
+		return nil, err
+	}
+
+	completionFileChannel := make(chan *CreateChatCompletionResult, 10)
+
+	go func() {
+		defer close(completionFileChannel)
+		// completionFileChannel <- &CreateChatCompletionResult{
+		// 	Error: fmt.Errorf("stream error test"),
+		// }
+		// // return
+
+		completionFileChannel <- &CreateChatCompletionResult{
+			Completion: &model.Completion{
+				Delta: &model.CompletionDelta{
+					FileReferences: fr,
+				},
+			},
+		}
+
+		if sessionId == "stream-error-test" {
+			completionFileChannel <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("stream error test"),
+			}
+			return
+		}
+
+		lastUserPayloads := messages[len(messages)-1]
+		if lastUserPayloads.Role != "user" {
+			completionFileChannel <- &CreateChatCompletionResult{
+				Error: fmt.Errorf("last payload role should be user"),
+			}
+			return
+		}
+		if len(strings.Split(lastUserPayloads.Content, " ")) == 1 {
+			completion := &model.Completion{
+				Object:  "chat.completion",
+				Id:      qaId,
+				Created: int(time.Now().Unix()),
+				Delta: &model.CompletionDelta{
+					Content: "더 구체적인 질문을 해 주세요",
+				},
+			}
+			completionFileChannel <- &CreateChatCompletionResult{
+				Completion: completion,
+			}
+			completionFileChannel <- &CreateChatCompletionResult{
+				Done: true,
+			}
+			return
+		}
+		tokenCount := 0
+
+		completionRequest := model.CreateChatCompletionRequest{
+			Messages: messages,
+			Provider: "",
+		}
+		requestBody, err := json.Marshal(completionRequest)
+		if err != nil {
+			completionFileChannel <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		stream, err := request.CreateChatStream(ctx, s.client, s.convEngineEndpoint+"/file", requestBody)
+		if err != nil {
+			completionFileChannel <- &CreateChatCompletionResult{
+				Error: err,
+			}
+			return
+		}
+		defer stream.Close()
+
+		for {
+			select {
+			case <-ctx.Done():
+				completionFileChannel <- &CreateChatCompletionResult{
+					Error: ctx.Err(),
+				}
+				return
+			default:
+				resp, err := stream.Recv()
+				slog.Info("===== ===== CreateChatCompletionFile Recv")
+				if err != nil && err != io.EOF {
+					completionFileChannel <- &CreateChatCompletionResult{
+						Error: err,
+					}
+
+					return
+				}
+				if err == io.EOF {
+					return
+				}
+
+				completion := &model.Completion{
+					Object:  "chat.completion",
+					Id:      qaId,
+					Created: int(time.Now().Unix()),
+					Delta:   resp.Delta,
+				}
+
+				completionFileChannel <- &CreateChatCompletionResult{
+					Completion: completion,
+				}
+
+				// count token
+				tokenCount += resp.TokenUsage
+				_ = s.EventLogService.WriteEvent(ctx, &pb.Event{
+					QaId: qaId,
+					Event: &pb.Event_TokenCountUpdated{
+						TokenCountUpdated: &pb.TokenCountUpdated{
+							TokenCount: int32(tokenCount),
+						},
+					},
+					CreatedAt: timestamppb.New(time.Now()),
+				})
+
+				// write event
+				merged := stream.ReadUntilNow()
+
+				if merged.Delta.Content != "" {
+					answerUpdatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_AnswerUpdated{
+							AnswerUpdated: &pb.AnswerUpdated{
+								Answer: merged.Delta.Content,
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, answerUpdatedEvent)
+				}
+
+				if fr != nil {
+					fileReferencesCreatedEvent := &pb.Event{
+						QaId: qaId,
+						Event: &pb.Event_FileReferencesCreated{
+							FileReferencesCreated: &pb.FileReferencesCreated{
+								FileReferences: model.FromModelFileReferencesToProtoFileReferences(fr),
+							},
+						},
+						CreatedAt: timestamppb.New(time.Now()),
+					}
+					_ = s.EventLogService.WriteEvent(ctx, fileReferencesCreatedEvent)
+					fr = nil
+				}
+			}
+		}
+
+	}()
+
+	return completionFileChannel, nil
+
+}
+
 func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param *CreateChatCompletionParameter) (chan *CreateChatCompletionResult, error) {
+	slog.Info("===== CreateChatCompletionMulti")
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
 	timeoutctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
@@ -141,6 +362,7 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 	if lastUserMessage == nil {
 		return nil, fmt.Errorf("there is no user message")
 	}
+
 	questionCreatedEvent := &pb.Event{
 		QaId:      qaId,
 		CreatedAt: timestamppb.New(time.Now()),
@@ -153,6 +375,8 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 			},
 		},
 	}
+	slog.Info(fmt.Sprintf("===== question create event -> q id: %T", s.EventLogService))
+
 	err = s.EventLogService.WriteEvent(ctx, questionCreatedEvent)
 	if err != nil {
 		return nil, err
@@ -227,9 +451,10 @@ func (s *CompletionService) CreateChatCompletionMulti(ctx context.Context, param
 				resp, err := stream.Recv()
 				if err != nil && err != io.EOF {
 					completionMultiChannel <- &CreateChatCompletionResult{
+
 						Error: err,
 					}
-
+					slog.Info("***** error CreateChatCompletionResult...")
 					return
 				}
 				if err == io.EOF {

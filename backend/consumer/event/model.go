@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
 	"bigkinds.or.kr/backend/model"
 	pb "bigkinds.or.kr/proto/event"
@@ -28,6 +29,17 @@ func fromProtoReferenceToModelReference(reference *pb.Reference) (*model.Referen
 			Byline:      reference.GetAttributes().GetByline(),
 			Content:     reference.GetAttributes().GetContent(),
 		},
+	}, nil
+}
+
+func fromProtoFileReferenceToModelFileReference(fileReference *pb.FileReference) (*model.FileReference, error) {
+	if fileReference == nil {
+		return nil, fmt.Errorf("file reference is nil")
+	}
+
+	return &model.FileReference{
+		FileName: fileReference.GetFilename(),
+		Content:  fileReference.GetContent(),
 	}, nil
 }
 
@@ -102,6 +114,15 @@ func convertEventToQuery(event *pb.Event) (*Query, error) {
 	case *pb.Event_RelatedQueriesCreated:
 		relatedQueries := t.RelatedQueriesCreated.GetRelatedQueries()
 		qa.RelatedQueries = relatedQueries
+	case *pb.Event_FileReferencesCreated:
+		slog.Info("===== ===== file created")
+		for _, fileRef := range t.FileReferencesCreated.GetFileReferences() {
+			modelFileRef, err := fromProtoFileReferenceToModelFileReference(fileRef)
+			if err != nil {
+				return nil, err
+			}
+			qa.FileReferences = append(qa.FileReferences, modelFileRef)
+		}
 	}
 
 	return &Query{

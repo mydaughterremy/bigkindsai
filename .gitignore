@@ -471,3 +471,6 @@ pyvenv.cfg
 pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/goland,intellij,pycharm,vim,virtualenv,python
+
+# upload file
+upload/

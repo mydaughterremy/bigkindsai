@@ -137,11 +137,16 @@ func (c *GPT) CreateChat(ctx context.Context, provider string, messages []*chat.
 	}
 
 	if err != nil {
+		slog.Info("===== ===== ===== gpt stream -> CreateRequestSolar error ")
 		return nil, err
 	}
 
+	slog.Info("===== ===== ===== gpt_stream -> finish creating req ")
+
 	resp, err := c.Client.Do(req)
 	if err != nil {
+		slog.Info("===== ===== ===== gpt stream -> Client do error ")
+		slog.Info(err.Error())
 		return nil, err
 	}
 

@@ -324,6 +324,7 @@ func (s *SearchPlugin) createTopicSearchRequests(arguments map[string]interface{
 }
 
 func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{}, extraArgs *ExtraArgs) ([]byte, error) {
+	slog.Info("===== ===== ===== Search Call...")
 	endpoint := os.Getenv("UPSTAGE_SEARCHSERVICE_MSEARCH_ENDPOINT")
 	if endpoint == "" {
 		return nil, errors.New("search service endpoint not set")
@@ -359,63 +360,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
-	}
-
-	itemsWithIds, err := unmarshalItemsWithIds(body)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling references: %s", err.Error())
-	}
-	references, err := getReference(itemsWithIds)
-	if err != nil {
-		return nil, err
-	}
-
-	merged := mergeChunks(references, extraArgs)
-	body, err = marshalReference(merged)
-	if err != nil {
-		return nil, err
-	}
-
-	return body, nil
-}
-
-func (s *SearchPlugin) TopicCall(ctx context.Context, arguments map[string]interface{}, extraArgs *ExtraArgs) ([]byte, error) {
-	endpoint := os.Getenv("UPSTAGE_SEARCHSERVICE_MSEARCH_ENDPOINT")
-	if endpoint == "" {
-		return nil, errors.New("search service endpoint not set")
-	}
-
-	query, err := s.createTopicSearchRequests(arguments, extraArgs)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := json.Marshal(query)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(b))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(ctx)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, ErrSearchFunctionFailed
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+		slog.Info("===== ===== ===== Search Call...")
 		return nil, err
 	}
 
