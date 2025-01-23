@@ -203,6 +203,8 @@ func NewRouter(db *gorm.DB, writer *kafka.Writer) chi.Router {
 			router.Use(authenticator.AuthMiddleware)
 			router.Post("/apikey", apiHandler.CreateApikey)
 			router.Get("/apikey/{apikey}", apiHandler.GetApikey)
+			router.Put("/apikey", apiHandler.UpdateApikey)
+			router.Delete("/apikey/{apikey}", apiHandler.DeleteApikey)
 		})
 	})
 

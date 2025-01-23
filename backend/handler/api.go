@@ -64,7 +64,7 @@ func (h *ApiHandler) UpdateApikey(w http.ResponseWriter, r *http.Request) {
 	_ = response.WriteJsonResponse(w, r, http.StatusOK, ak)
 }
 
-func (h *ApiHandler) DeleteApiley(w http.ResponseWriter, r *http.Request) {
+func (h *ApiHandler) DeleteApikey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	k := chi.URLParam(r, "apikey")
 

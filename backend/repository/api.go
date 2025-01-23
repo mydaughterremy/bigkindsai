@@ -39,14 +39,13 @@ func (r *ApiRepository) GetApikey(ctx context.Context, akId string) (*model.Apik
 }
 
 func (r *ApiRepository) UpdateApikey(ctx context.Context, ak *model.Apikey) (*model.Apikey, error) {
-	res := r.DB.WithContext(ctx).Model(&model.Apikey{
-		ID: ak.ID,
-	}).Clauses(clause.Returning{}).Updates(ak)
+	uAk := &model.Apikey{}
+	res := r.DB.WithContext(ctx).Model(uAk).Clauses(clause.Returning{}).Where("id = ?", ak.ID).Updates(ak)
 
 	if res.Error != nil {
 		return nil, res.Error
 	}
-	return ak, nil
+	return uAk, nil
 }
 
 func (r *ApiRepository) DeleteApikey(ctx context.Context, akId string) error {
