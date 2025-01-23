@@ -93,6 +93,62 @@ func (s *SearchPlugin) hasFutureDate(dateRange *model.PublishedDateRange) (bool,
 	}
 	return false, nil
 }
+func handleTopicOpenSearcyQuery(rawQuery, standaloneQuery string, topK int) *model.MSearchBody {
+	now := time.Now()
+	var envelopedAtRange map[string]string
+
+	if true {
+		yesterday := now.AddDate(0, 0, -1)
+		envelopedAtRange = map[string]string{
+			"gte": yesterday.Format("2006-01-02") + "T20:00:00.000+09:00",
+			"lte": now.Format("2006-01-02") + "T08:00:00.000+09:00",
+		}
+	} else {
+		envelopedAtRange = map[string]string{
+			"gte": now.Format("2006-01-02") + "T08:00:00.000+09:00",
+			"lte": now.Format("2006-01-02") + "T17:00:00.000+09:00",
+		}
+	}
+
+	// 기본 필터 설정
+	baseFilters := []map[string]interface{}{
+		{
+			"range": map[string]interface{}{
+				"enveloped_at": envelopedAtRange,
+			},
+		},
+	}
+
+	// article_length 필터 추가
+	if os.Getenv("FILTER_ARTICLE_LENGTH") == "true" {
+		filterArticleLength := map[string]interface{}{
+			"range": map[string]interface{}{
+				"article_length": map[string]interface{}{"gte": 200},
+			},
+		}
+		baseFilters = append(baseFilters, filterArticleLength)
+	}
+
+	searchRequest := &model.SearchRequest{
+		Query: map[string]string{
+			"title":   standaloneQuery,
+			"content": standaloneQuery,
+		},
+		Size:     topK,
+		Filters:  baseFilters,
+		MinScore: 20,
+	}
+
+	return &model.MSearchBody{
+		Requests: []*model.SearchRequest{searchRequest},
+		Size:     topK,
+		RawQuery: rawQuery,
+		Aggregate: &model.MSearchAggregate{
+			Method:         "rrf",
+			PreserveSource: false,
+		},
+	}
+}
 
 func handleDateRangeNotSpecified(rawQuery, standaloneQuery string, topK int) *model.MSearchBody {
 	filtersRecent3M := []map[string]interface{}{
@@ -247,6 +303,26 @@ func (s *SearchPlugin) createSearchRequests(arguments map[string]interface{}, ex
 	return body, nil
 }
 
+func (s *SearchPlugin) createTopicSearchRequests(arguments map[string]interface{}, extraArgs *ExtraArgs) (*model.MSearchBody, error) {
+	var body *model.MSearchBody
+	topK := extraArgs.Topk
+	standaloneQuery, ok := arguments["standalone_query"].(string)
+	rawQuery := extraArgs.RawQuery
+	if !ok {
+		standaloneQuery = rawQuery // fallback to raw query
+	}
+	// case 2: date range specified
+	body = handleTopicOpenSearcyQuery(rawQuery, standaloneQuery, topK)
+	provider := extraArgs.Provider
+	if len(provider) > 0 {
+		for _, request := range body.Requests {
+			request.Query["provider"] = provider
+		}
+	}
+
+	return body, nil
+}
+
 func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{}, extraArgs *ExtraArgs) ([]byte, error) {
 	endpoint := os.Getenv("UPSTAGE_SEARCHSERVICE_MSEARCH_ENDPOINT")
 	if endpoint == "" {
@@ -295,7 +371,7 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 		return nil, err
 	}
 
-	merged := mergeChunks(references,extraArgs)
+	merged := mergeChunks(references, extraArgs)
 	body, err = marshalReference(merged)
 	if err != nil {
 		return nil, err
@@ -304,6 +380,62 @@ func (s *SearchPlugin) Call(ctx context.Context, arguments map[string]interface{
 	return body, nil
 }
 
+func (s *SearchPlugin) TopicCall(ctx context.Context, arguments map[string]interface{}, extraArgs *ExtraArgs) ([]byte, error) {
+	endpoint := os.Getenv("UPSTAGE_SEARCHSERVICE_MSEARCH_ENDPOINT")
+	if endpoint == "" {
+		return nil, errors.New("search service endpoint not set")
+	}
+
+	query, err := s.createTopicSearchRequests(arguments, extraArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := json.Marshal(query)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(ctx)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, ErrSearchFunctionFailed
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	itemsWithIds, err := unmarshalItemsWithIds(body)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling references: %s", err.Error())
+	}
+	references, err := getReference(itemsWithIds)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := mergeChunks(references, extraArgs)
+	body, err = marshalReference(merged)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
 
 func (s *SearchPlugin) Definition() model.Function {
 	firstExampleStartTime := time.Date(s.CurrentTime.Time.Year(), s.CurrentTime.Time.Month(), s.CurrentTime.Time.Day(), 0, 0, 0, 0, s.CurrentTime.Location).AddDate(0, 0, -30).Format("2006-01-02T15:04:05-07:00")

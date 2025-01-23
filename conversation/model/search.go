@@ -31,8 +31,9 @@ type MSearchAggregate struct {
 }
 
 type SearchRequest struct {
-	Id      string                   `json:"id"`
-	Query   map[string]string        `json:"query"`
-	Filters []map[string]interface{} `json:"filters"`
-	Size    int                      `json:"size"`
+	Id       string                   `json:"id"`
+	Query    map[string]string        `json:"query"`
+	Filters  []map[string]interface{} `json:"filters"`
+	Size     int                      `json:"size"`
+	MinScore float64                  `json:"min_score"`
 }
